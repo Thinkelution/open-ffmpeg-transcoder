@@ -1,0 +1,45 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Open FFmpeg Transcoder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="h-full text-gray-100">
+    <div class="min-h-full">
+        <nav class="bg-gray-900 border-b border-gray-800">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div class="flex h-16 items-center justify-between">
+                    <div class="flex items-center gap-8">
+                        <a href="/" class="flex items-center gap-2 text-white font-bold text-lg">
+                            <svg class="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Open FFmpeg Transcoder
+                        </a>
+                        <div class="flex gap-4">
+                            <a href="/" class="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">Dashboard</a>
+                            <a href="/jobs" class="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">Jobs</a>
+                            <a href="/system" class="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">System</a>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        API: <code class="text-emerald-400">/api/v1</code>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+            {{template "content" .}}
+        </main>
+    </div>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+{{end}}

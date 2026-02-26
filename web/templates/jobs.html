@@ -1,0 +1,81 @@
+{{template "layout" .}}
+{{define "content"}}
+<div x-data="jobsPage()" x-init="load()">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Jobs</h1>
+        <div class="flex gap-2">
+            <select x-model="filter" @change="load()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300">
+                <option value="">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="downloading">Downloading</option>
+                <option value="transcoding">Transcoding</option>
+                <option value="uploading">Uploading</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            <button @click="load()" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm hover:bg-gray-700">
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="text-gray-400 text-left border-b border-gray-800">
+                    <tr>
+                        <th class="px-6 py-3">ID</th>
+                        <th class="px-6 py-3">Status</th>
+                        <th class="px-6 py-3">Progress</th>
+                        <th class="px-6 py-3">Speed</th>
+                        <th class="px-6 py-3">FPS</th>
+                        <th class="px-6 py-3">Duration</th>
+                        <th class="px-6 py-3">Created</th>
+                        <th class="px-6 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="job in jobs" :key="job.id">
+                        <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                            <td class="px-6 py-3">
+                                <a :href="'/api/v1/jobs/' + job.id" target="_blank" class="text-emerald-400 hover:underline font-mono text-xs" x-text="job.id.substring(0,8) + '...'"></a>
+                            </td>
+                            <td class="px-6 py-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium" :class="statusClass(job.status)" x-text="job.status"></span>
+                            </td>
+                            <td class="px-6 py-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-24 bg-gray-700 rounded-full h-2">
+                                        <div class="bg-emerald-500 h-2 rounded-full transition-all" :style="'width:' + Math.min(job.progress, 100) + '%'"></div>
+                                    </div>
+                                    <span class="text-xs text-gray-400" x-text="Math.round(job.progress) + '%'"></span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-3 text-gray-400" x-text="job.speed || '-'"></td>
+                            <td class="px-6 py-3 text-gray-400" x-text="job.fps ? job.fps.toFixed(1) : '-'"></td>
+                            <td class="px-6 py-3 text-gray-400 text-xs" x-text="formatDuration(job.duration_ms)"></td>
+                            <td class="px-6 py-3 text-gray-400 text-xs" x-text="new Date(job.created_at).toLocaleString()"></td>
+                            <td class="px-6 py-3">
+                                <div class="flex gap-2">
+                                    <button x-show="job.status === 'failed' || job.status === 'cancelled'"
+                                        @click="retry(job.id)"
+                                        class="text-xs text-yellow-400 hover:underline">Retry</button>
+                                    <button @click="deleteJob(job.id)"
+                                        class="text-xs text-red-400 hover:underline">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <tr x-show="jobs.length === 0">
+                        <td colspan="8" class="px-6 py-8 text-center text-gray-500">No jobs found.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-6 py-3 border-t border-gray-800 text-sm text-gray-400">
+            Total: <span x-text="total"></span> jobs
+        </div>
+    </div>
+</div>
+{{end}}

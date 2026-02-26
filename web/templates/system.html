@@ -1,0 +1,142 @@
+{{template "layout" .}}
+{{define "content"}}
+<div x-data="systemPage()" x-init="load()">
+    <h1 class="text-2xl font-bold mb-6">System Information</h1>
+
+    <!-- System Info -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="bg-gray-900 rounded-lg border border-gray-800 p-6">
+            <h2 class="text-lg font-semibold mb-4">FFmpeg Info</h2>
+            <div x-show="info">
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-400">Version</span><span class="font-mono text-xs" x-text="info?.ffmpeg_version"></span></div>
+                    <div class="flex justify-between"><span class="text-gray-400">NVIDIA GPU</span><span :class="info?.gpu?.nvidia_available ? 'text-emerald-400' : 'text-red-400'" x-text="info?.gpu?.nvidia_available ? 'Available' : 'Not Available'"></span></div>
+                    <div class="flex justify-between"><span class="text-gray-400">Max Workers</span><span x-text="info?.config?.max_workers"></span></div>
+                    <div class="flex justify-between"><span class="text-gray-400">Temp Dir</span><span class="font-mono text-xs" x-text="info?.config?.temp_dir"></span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 rounded-lg border border-gray-800 p-6">
+            <h2 class="text-lg font-semibold mb-4">Health Check</h2>
+            <div x-show="health">
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-400">Status</span><span class="text-emerald-400" x-text="health?.status"></span></div>
+                    <div class="flex justify-between"><span class="text-gray-400">Version</span><span x-text="health?.version"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hardware Analysis -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-6 mb-8">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Hardware Analysis</h2>
+            <button @click="analyze()" :disabled="analyzing" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+                <span x-show="!analyzing">Run Analysis</span>
+                <span x-show="analyzing">Analyzing...</span>
+            </button>
+        </div>
+
+        <div x-show="analysis">
+            <!-- Overall Score -->
+            <div class="flex items-center gap-4 mb-6 p-4 bg-gray-800 rounded-lg">
+                <div class="text-4xl font-bold" :class="scoreColor(analysis?.score)" x-text="analysis?.score"></div>
+                <div>
+                    <div class="text-lg font-semibold" x-text="analysis?.rating"></div>
+                    <div class="text-sm text-gray-400">Overall Hardware Score</div>
+                </div>
+            </div>
+
+            <!-- Component Scores -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="text-sm text-gray-400 mb-1">CPU</div>
+                    <div class="text-xl font-bold" x-text="analysis?.cpu?.score"></div>
+                    <div class="text-xs text-gray-500 mt-1" x-text="analysis?.cpu?.model"></div>
+                    <div class="text-xs text-gray-500" x-text="analysis?.cpu?.threads + ' threads'"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="text-sm text-gray-400 mb-1">Memory</div>
+                    <div class="text-xl font-bold" x-text="analysis?.memory?.score"></div>
+                    <div class="text-xs text-gray-500 mt-1" x-text="analysis?.memory?.total_gb?.toFixed(1) + ' GB total'"></div>
+                    <div class="text-xs text-gray-500" x-text="analysis?.memory?.available_gb?.toFixed(1) + ' GB available'"></div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="text-sm text-gray-400 mb-1">GPU</div>
+                    <div class="text-xl font-bold" x-text="analysis?.gpu?.score || 'N/A'"></div>
+                    <template x-if="analysis?.gpu?.available">
+                        <div>
+                            <template x-for="dev in analysis.gpu.devices" :key="dev.index">
+                                <div class="text-xs text-gray-500" x-text="dev.name + ' (' + dev.memory_gb.toFixed(1) + ' GB)'"></div>
+                            </template>
+                        </div>
+                    </template>
+                    <div x-show="!analysis?.gpu?.available" class="text-xs text-gray-500">No GPU detected</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="text-sm text-gray-400 mb-1">Disk I/O</div>
+                    <div class="text-xl font-bold" x-text="analysis?.disk?.score"></div>
+                    <div class="text-xs text-gray-500 mt-1" x-text="'Read: ' + analysis?.disk?.read_mbps?.toFixed(0) + ' MB/s'"></div>
+                    <div class="text-xs text-gray-500" x-text="'Write: ' + analysis?.disk?.write_mbps?.toFixed(0) + ' MB/s'"></div>
+                </div>
+            </div>
+
+            <!-- Parallel Estimates -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="text-sm text-gray-400 mb-2">Estimated Parallel Transcodes</div>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between"><span>CPU 1080p H.264</span><span class="font-bold" x-text="analysis?.estimated_parallel_transcodes?.cpu_1080p_h264"></span></div>
+                        <div class="flex justify-between"><span>GPU 1080p H.264</span><span class="font-bold" x-text="analysis?.estimated_parallel_transcodes?.gpu_1080p_h264 || 'N/A'"></span></div>
+                        <div class="flex justify-between"><span>CPU 4K H.265</span><span class="font-bold" x-text="analysis?.estimated_parallel_transcodes?.cpu_4k_h265"></span></div>
+                        <div class="flex justify-between"><span>GPU 4K H.265</span><span class="font-bold" x-text="analysis?.estimated_parallel_transcodes?.gpu_4k_h265 || 'N/A'"></span></div>
+                    </div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <div class="text-sm text-gray-400 mb-2">Estimated Encoding Speed</div>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between"><span>1080p H.264 (CPU)</span><span class="font-bold" x-text="analysis?.estimated_speed?.['1080p_h264_cpu']"></span></div>
+                        <div class="flex justify-between"><span>1080p H.264 (GPU)</span><span class="font-bold" x-text="analysis?.estimated_speed?.['1080p_h264_gpu']"></span></div>
+                        <div class="flex justify-between"><span>4K H.265 (CPU)</span><span class="font-bold" x-text="analysis?.estimated_speed?.['4k_h265_cpu']"></span></div>
+                        <div class="flex justify-between"><span>4K H.265 (GPU)</span><span class="font-bold" x-text="analysis?.estimated_speed?.['4k_h265_gpu']"></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Benchmark -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Run Benchmark</h2>
+        </div>
+        <div class="flex gap-4 mb-4">
+            <select x-model="benchCodec" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                <option value="libx264">H.264 (CPU)</option>
+                <option value="libx265">H.265 (CPU)</option>
+                <option value="h264_nvenc">H.264 NVENC (GPU)</option>
+                <option value="hevc_nvenc">H.265 NVENC (GPU)</option>
+            </select>
+            <select x-model="benchRes" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                <option value="1920x1080">1080p</option>
+                <option value="1280x720">720p</option>
+                <option value="3840x2160">4K</option>
+            </select>
+            <button @click="runBenchmark()" :disabled="benchmarking" class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+                <span x-show="!benchmarking">Run</span>
+                <span x-show="benchmarking">Running...</span>
+            </button>
+        </div>
+        <div x-show="benchResult" class="bg-gray-800 rounded-lg p-4 text-sm">
+            <div class="space-y-1">
+                <div class="flex justify-between"><span class="text-gray-400">Codec</span><span x-text="benchResult?.codec"></span></div>
+                <div class="flex justify-between"><span class="text-gray-400">Resolution</span><span x-text="benchResult?.resolution"></span></div>
+                <div class="flex justify-between"><span class="text-gray-400">Speed</span><span class="text-emerald-400 font-bold" x-text="benchResult?.speed_factor?.toFixed(2) + 'x realtime'"></span></div>
+                <div class="flex justify-between"><span class="text-gray-400">Elapsed</span><span x-text="(benchResult?.elapsed_ms / 1000)?.toFixed(1) + 's'"></span></div>
+                <div class="flex justify-between"><span class="text-gray-400">Status</span><span x-text="benchResult?.status"></span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

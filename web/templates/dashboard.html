@@ -1,0 +1,62 @@
+{{template "layout" .}}
+{{define "content"}}
+<div x-data="dashboard()" x-init="startPolling()">
+    <h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+
+    <!-- Stats cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
+        <template x-for="s in statuses" :key="s.key">
+            <div class="bg-gray-900 rounded-lg border border-gray-800 p-4">
+                <div class="text-sm text-gray-400" x-text="s.label"></div>
+                <div class="text-2xl font-bold mt-1" :class="s.color" x-text="counts[s.key] || 0"></div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Recent jobs -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Recent Jobs</h2>
+            <a href="/jobs" class="text-emerald-400 text-sm hover:underline">View all</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="text-gray-400 text-left border-b border-gray-800">
+                    <tr>
+                        <th class="px-6 py-3">ID</th>
+                        <th class="px-6 py-3">Status</th>
+                        <th class="px-6 py-3">Progress</th>
+                        <th class="px-6 py-3">Speed</th>
+                        <th class="px-6 py-3">Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="job in jobs" :key="job.id">
+                        <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                            <td class="px-6 py-3">
+                                <a :href="'/api/v1/jobs/' + job.id" class="text-emerald-400 hover:underline font-mono text-xs" x-text="job.id.substring(0,8) + '...'"></a>
+                            </td>
+                            <td class="px-6 py-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium" :class="statusClass(job.status)" x-text="job.status"></span>
+                            </td>
+                            <td class="px-6 py-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-24 bg-gray-700 rounded-full h-2">
+                                        <div class="bg-emerald-500 h-2 rounded-full transition-all" :style="'width:' + job.progress + '%'"></div>
+                                    </div>
+                                    <span class="text-xs text-gray-400" x-text="Math.round(job.progress) + '%'"></span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-3 text-gray-400" x-text="job.speed || '-'"></td>
+                            <td class="px-6 py-3 text-gray-400 text-xs" x-text="new Date(job.created_at).toLocaleString()"></td>
+                        </tr>
+                    </template>
+                    <tr x-show="jobs.length === 0">
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">No jobs yet. Create one via the API.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}
