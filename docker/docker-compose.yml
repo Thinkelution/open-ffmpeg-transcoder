@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  transcoder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: transcoder
+    ports:
+      - "${PORT:-8090}:8090"
+    environment:
+      - MODE=all
+      - PORT=8090
+      - DATABASE_URL=postgres://transcoder:transcoder@postgres:5432/transcoder?sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - TEMP_DIR=/tmp/transcoder
+      - MAX_WORKERS=${MAX_WORKERS:-2}
+      - FFMPEG_PATH=/usr/bin/ffmpeg
+      - FFPROBE_PATH=/usr/bin/ffprobe
+      - API_KEY=${API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-}
+      - S3_ENDPOINT=${S3_ENDPOINT:-}
+    volumes:
+      - transcoder-temp:/tmp/transcoder
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: transcoder-postgres
+    environment:
+      POSTGRES_USER: transcoder
+      POSTGRES_PASSWORD: transcoder
+      POSTGRES_DB: transcoder
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transcoder"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: transcoder-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  transcoder-temp:
