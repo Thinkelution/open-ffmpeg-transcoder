@@ -45,6 +45,7 @@ type Config struct {
 	HLSAudioCodec         string
 	HLSAudioBitrate       string
 	HLSSegmentSeconds     int
+	HLSLadder             string
 }
 
 func Load() *Config {
@@ -84,6 +85,7 @@ func Load() *Config {
 		HLSAudioCodec:         getEnv("HLS_AUDIO_CODEC", "aac"),
 		HLSAudioBitrate:       getEnv("HLS_AUDIO_BITRATE", "128k"),
 		HLSSegmentSeconds:     getEnvInt("HLS_SEGMENT_SECONDS", 6),
+		HLSLadder:             getEnv("HLS_LADDER", ""),
 	}
 }
 

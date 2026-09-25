@@ -76,23 +76,17 @@
         </section>
 
         <section class="bg-gray-900 rounded-lg border border-gray-800 p-6 lg:col-span-2">
-            <h2 class="text-lg font-semibold mb-4">HLS Profile</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-lg font-semibold">HLS Ladder</h2>
+                    <p class="text-sm text-gray-400 mt-1">Create a master playlist with one variant playlist per rendition.</p>
+                </div>
+                <button @click="addRendition()" class="bg-gray-800 border border-gray-700 hover:bg-gray-700 px-3 py-2 rounded-lg text-sm">Add rendition</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <label class="block">
                     <span class="text-sm text-gray-300">Video codec</span>
                     <input x-model="form.hls_video_codec" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="libx264">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-gray-300">Video bitrate</span>
-                    <input x-model="form.hls_video_bitrate" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="2500k">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-gray-300">Width</span>
-                    <input type="number" min="1" x-model.number="form.hls_width" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-gray-300">Height</span>
-                    <input type="number" min="1" x-model.number="form.hls_height" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
                 </label>
                 <label class="block">
                     <span class="text-sm text-gray-300">Frame rate</span>
@@ -110,6 +104,34 @@
                     <span class="text-sm text-gray-300">Segment seconds</span>
                     <input type="number" min="1" x-model.number="form.hls_segment_seconds" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
                 </label>
+            </div>
+            <div class="overflow-x-auto border border-gray-800 rounded-lg">
+                <table class="w-full text-sm">
+                    <thead class="text-gray-400 text-left border-b border-gray-800">
+                        <tr>
+                            <th class="px-4 py-3">Name</th>
+                            <th class="px-4 py-3">Width</th>
+                            <th class="px-4 py-3">Height</th>
+                            <th class="px-4 py-3">Video bitrate</th>
+                            <th class="px-4 py-3">Audio bitrate</th>
+                            <th class="px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(rendition, index) in ladder" :key="index">
+                            <tr class="border-b border-gray-800/50">
+                                <td class="px-4 py-3"><input x-model="rendition.name" class="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="720p"></td>
+                                <td class="px-4 py-3"><input type="number" min="1" x-model.number="rendition.width" class="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"></td>
+                                <td class="px-4 py-3"><input type="number" min="1" x-model.number="rendition.height" class="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"></td>
+                                <td class="px-4 py-3"><input x-model="rendition.video_bitrate" class="w-32 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="2800k"></td>
+                                <td class="px-4 py-3"><input x-model="rendition.audio_bitrate" class="w-32 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="128k"></td>
+                                <td class="px-4 py-3 text-right">
+                                    <button @click="removeRendition(index)" :disabled="ladder.length <= 1" class="text-red-400 hover:underline disabled:opacity-40 disabled:no-underline">Remove</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
             </div>
         </section>
     </div>

@@ -183,6 +183,11 @@ function settingsPage() {
         saving: false,
         message: '',
         messageType: 'success',
+        ladder: [
+            { name: '1080p', width: 1920, height: 1080, video_bitrate: '5000k', audio_bitrate: '128k' },
+            { name: '720p', width: 1280, height: 720, video_bitrate: '2800k', audio_bitrate: '128k' },
+            { name: '480p', width: 854, height: 480, video_bitrate: '1400k', audio_bitrate: '128k' },
+        ],
         form: {
             scanner_enabled: false,
             scanner_interval_seconds: 60,
@@ -204,12 +209,14 @@ function settingsPage() {
             hls_audio_codec: 'aac',
             hls_audio_bitrate: '128k',
             hls_segment_seconds: 6,
+            hls_ladder: '',
         },
 
         async load() {
             try {
                 const data = await apiGet('/api/v1/settings');
                 this.form = { ...this.form, ...data, s3_secret_key: '' };
+                this.ladder = this.parseLadder(this.form.hls_ladder);
             } catch (e) {
                 this.showMessage('Could not load settings.', 'error');
                 console.error('Settings load error:', e);
@@ -220,12 +227,13 @@ function settingsPage() {
             this.saving = true;
             this.message = '';
             try {
-                const payload = { ...this.form };
+                const payload = { ...this.form, hls_ladder: JSON.stringify(this.cleanLadder()) };
                 const data = await apiPut('/api/v1/settings', payload);
                 if (data.error) {
                     this.showMessage(data.error, 'error');
                 } else {
                     this.form = { ...this.form, ...data, s3_secret_key: '' };
+                    this.ladder = this.parseLadder(this.form.hls_ladder);
                     this.showMessage('Settings saved. The scanner will use them on the next scan.', 'success');
                 }
             } catch (e) {
@@ -238,6 +246,41 @@ function settingsPage() {
         showMessage(text, type) {
             this.message = text;
             this.messageType = type;
+        },
+
+        addRendition() {
+            this.ladder.push({ name: '360p', width: 640, height: 360, video_bitrate: '800k', audio_bitrate: this.form.hls_audio_bitrate || '128k' });
+        },
+
+        removeRendition(index) {
+            if (this.ladder.length <= 1) return;
+            this.ladder.splice(index, 1);
+        },
+
+        parseLadder(value) {
+            try {
+                const parsed = JSON.parse(value || '[]');
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            } catch (e) {
+                console.error('HLS ladder parse error:', e);
+            }
+            return [
+                { name: '1080p', width: 1920, height: 1080, video_bitrate: '5000k', audio_bitrate: this.form.hls_audio_bitrate || '128k' },
+                { name: '720p', width: 1280, height: 720, video_bitrate: '2800k', audio_bitrate: this.form.hls_audio_bitrate || '128k' },
+                { name: '480p', width: 854, height: 480, video_bitrate: '1400k', audio_bitrate: this.form.hls_audio_bitrate || '128k' },
+            ];
+        },
+
+        cleanLadder() {
+            return this.ladder
+                .map((rendition) => ({
+                    name: String(rendition.name || '').trim(),
+                    width: Number(rendition.width || 0),
+                    height: Number(rendition.height || 0),
+                    video_bitrate: String(rendition.video_bitrate || '').trim(),
+                    audio_bitrate: String(rendition.audio_bitrate || this.form.hls_audio_bitrate || '').trim(),
+                }))
+                .filter((rendition) => rendition.width > 0 && rendition.height > 0 && rendition.video_bitrate);
         }
     };
 }

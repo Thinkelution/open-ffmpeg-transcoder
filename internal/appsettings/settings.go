@@ -2,6 +2,7 @@ package appsettings
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -42,6 +43,7 @@ func Load(ctx context.Context, db *database.DB, cfg *config.Config) (RuntimeSett
 			HLSAudioCodec:         database.StringSetting(values, "hls_audio_codec", cfg.HLSAudioCodec),
 			HLSAudioBitrate:       database.StringSetting(values, "hls_audio_bitrate", cfg.HLSAudioBitrate),
 			HLSSegmentSeconds:     database.IntSetting(values, "hls_segment_seconds", cfg.HLSSegmentSeconds),
+			HLSLadder:             database.StringSetting(values, "hls_ladder", cfg.HLSLadder),
 		},
 		S3SecretKey: secret,
 	}
@@ -67,6 +69,9 @@ func Load(ctx context.Context, db *database.DB, cfg *config.Config) (RuntimeSett
 	if settings.HLSSegmentSeconds <= 0 {
 		settings.HLSSegmentSeconds = 6
 	}
+	if strings.TrimSpace(settings.HLSLadder) == "" {
+		settings.HLSLadder = defaultLadderJSON(settings.HLSAudioBitrate)
+	}
 
 	return settings, nil
 }
@@ -91,6 +96,7 @@ func Save(ctx context.Context, db *database.DB, req database.UpdateAppSettingsRe
 		"hls_audio_codec":          strings.TrimSpace(req.HLSAudioCodec),
 		"hls_audio_bitrate":        strings.TrimSpace(req.HLSAudioBitrate),
 		"hls_segment_seconds":      strconv.Itoa(defaultInt(req.HLSSegmentSeconds, 6)),
+		"hls_ladder":               normalizeLadder(req.HLSLadder, req.HLSAudioBitrate),
 	}
 	if req.S3SecretKey != "" {
 		values["s3_secret_key"] = req.S3SecretKey
@@ -112,4 +118,42 @@ func defaultInt(value, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func normalizeLadder(value, defaultAudioBitrate string) string {
+	var renditions []database.HLSRendition
+	if err := json.Unmarshal([]byte(value), &renditions); err != nil || len(renditions) == 0 {
+		return defaultLadderJSON(defaultAudioBitrate)
+	}
+	clean := make([]database.HLSRendition, 0, len(renditions))
+	for _, rendition := range renditions {
+		rendition.Name = strings.TrimSpace(rendition.Name)
+		rendition.VideoBitrate = strings.TrimSpace(rendition.VideoBitrate)
+		rendition.AudioBitrate = strings.TrimSpace(rendition.AudioBitrate)
+		if rendition.Width <= 0 || rendition.Height <= 0 || rendition.VideoBitrate == "" {
+			continue
+		}
+		if rendition.AudioBitrate == "" {
+			rendition.AudioBitrate = defaultAudioBitrate
+		}
+		clean = append(clean, rendition)
+	}
+	if len(clean) == 0 {
+		return defaultLadderJSON(defaultAudioBitrate)
+	}
+	out, _ := json.Marshal(clean)
+	return string(out)
+}
+
+func defaultLadderJSON(defaultAudioBitrate string) string {
+	if strings.TrimSpace(defaultAudioBitrate) == "" {
+		defaultAudioBitrate = "128k"
+	}
+	renditions := []database.HLSRendition{
+		{Name: "1080p", Width: 1920, Height: 1080, VideoBitrate: "5000k", AudioBitrate: defaultAudioBitrate},
+		{Name: "720p", Width: 1280, Height: 720, VideoBitrate: "2800k", AudioBitrate: defaultAudioBitrate},
+		{Name: "480p", Width: 854, Height: 480, VideoBitrate: "1400k", AudioBitrate: defaultAudioBitrate},
+	}
+	out, _ := json.Marshal(renditions)
+	return string(out)
 }

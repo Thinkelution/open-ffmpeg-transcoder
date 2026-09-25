@@ -115,7 +115,21 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 			return nil
 		}
 		outputPath = filepath.Join(outputDir, "index.m3u8")
-		settings.ExtraFlags = ensureHLSSegmentFilename(settings.ExtraFlags, filepath.Join(outputDir, "segment_%05d.ts"))
+		if settings.HLS != nil && len(settings.HLS.Renditions) > 0 {
+			outputPath = filepath.Join(outputDir, "master.m3u8")
+			if settings.HLS.MasterPlaylist == "" {
+				settings.HLS.MasterPlaylist = "master.m3u8"
+			}
+			for i, rendition := range settings.HLS.Renditions {
+				renditionDir := filepath.Join(outputDir, hlsRenditionDir(rendition, i))
+				if err := os.MkdirAll(renditionDir, 0755); err != nil {
+					h.failJob(jobID, job, fmt.Sprintf("create HLS rendition dir: %v", err))
+					return nil
+				}
+			}
+		} else {
+			settings.ExtraFlags = ensureHLSSegmentFilename(settings.ExtraFlags, filepath.Join(outputDir, "segment_%05d.ts"))
+		}
 	}
 
 	progressCb := func(progress float32, speed string, fps float32) {
@@ -190,6 +204,26 @@ func ensureHLSSegmentFilename(flags []string, pattern string) []string {
 		}
 	}
 	return append(flags, "-hls_segment_filename", pattern)
+}
+
+func hlsRenditionDir(r database.HLSRendition, index int) string {
+	name := strings.TrimSpace(r.Name)
+	if name == "" && r.Height > 0 {
+		name = fmt.Sprintf("%dp", r.Height)
+	}
+	if name == "" {
+		name = fmt.Sprintf("v%d", index)
+	}
+	var b strings.Builder
+	for _, ch := range strings.ToLower(name) {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
+			b.WriteRune(ch)
+		}
+	}
+	if b.Len() == 0 {
+		return fmt.Sprintf("v%d", index)
+	}
+	return b.String()
 }
 
 func (h *Handler) failJob(jobID string, job *database.Job, errMsg string) {

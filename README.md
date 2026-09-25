@@ -174,7 +174,9 @@ SCANNER_INPUT_PREFIX=incoming
 SCANNER_OUTPUT_PREFIX=hls
 ```
 
-Scanner HLS defaults can be tuned with `HLS_VIDEO_CODEC`, `HLS_VIDEO_BITRATE`, `HLS_WIDTH`, `HLS_HEIGHT`, `HLS_FRAMERATE`, `HLS_AUDIO_CODEC`, `HLS_AUDIO_BITRATE`, and `HLS_SEGMENT_SECONDS`.
+Scanner HLS defaults can be tuned with `HLS_VIDEO_CODEC`, `HLS_FRAMERATE`, `HLS_AUDIO_CODEC`, `HLS_AUDIO_BITRATE`, `HLS_SEGMENT_SECONDS`, and `HLS_LADDER`.
+
+`HLS_LADDER` is a JSON array of renditions. The default ladder is 1080p, 720p, and 480p. Scanner jobs write `master.m3u8` plus one folder per rendition, for example `720p/index.m3u8` with its segments.
 
 These values can also be changed in the dashboard under **Settings** after signing in. The Wasabi secret is write-only from the browser: leave it blank to keep the current value.
 

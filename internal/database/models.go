@@ -82,6 +82,25 @@ type TranscodeSettings struct {
 	Format        string        `json:"format,omitempty"`
 	HardwareAccel string        `json:"hardware_accel,omitempty"`
 	ExtraFlags    []string      `json:"extra_flags,omitempty"`
+	HLS           *HLSSettings  `json:"hls,omitempty"`
+}
+
+type HLSSettings struct {
+	MasterPlaylist string         `json:"master_playlist,omitempty"`
+	SegmentSeconds int            `json:"segment_seconds,omitempty"`
+	VideoCodec     string         `json:"video_codec,omitempty"`
+	AudioCodec     string         `json:"audio_codec,omitempty"`
+	AudioBitrate   string         `json:"audio_bitrate,omitempty"`
+	Framerate      int            `json:"framerate,omitempty"`
+	Renditions     []HLSRendition `json:"renditions,omitempty"`
+}
+
+type HLSRendition struct {
+	Name         string `json:"name"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	VideoBitrate string `json:"video_bitrate"`
+	AudioBitrate string `json:"audio_bitrate,omitempty"`
 }
 
 type CreateJobRequest struct {
@@ -135,6 +154,7 @@ type AppSettings struct {
 	HLSAudioCodec         string `json:"hls_audio_codec"`
 	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
 	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
+	HLSLadder             string `json:"hls_ladder"`
 }
 
 type UpdateAppSettingsRequest struct {
@@ -157,4 +177,5 @@ type UpdateAppSettingsRequest struct {
 	HLSAudioCodec         string `json:"hls_audio_codec"`
 	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
 	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
+	HLSLadder             string `json:"hls_ladder"`
 }

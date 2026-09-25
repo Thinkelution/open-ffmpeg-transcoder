@@ -34,6 +34,10 @@ func New(ffmpegPath, ffprobePath string) *FFmpeg {
 
 // BuildArgs constructs the full FFmpeg argument list from transcoding settings.
 func (f *FFmpeg) BuildArgs(input, output string, settings database.TranscodeSettings, durationSec float64) []string {
+	if settings.Format == "hls" && settings.HLS != nil && len(settings.HLS.Renditions) > 0 {
+		return f.BuildHLSLadderArgs(input, output, settings, durationSec)
+	}
+
 	args := []string{"-y"}
 
 	// Hardware acceleration input flags
@@ -98,6 +102,129 @@ func (f *FFmpeg) BuildArgs(input, output string, settings database.TranscodeSett
 	args = append(args, "-progress", "pipe:1", "-stats_period", "1")
 
 	args = append(args, output)
+	return args
+}
+
+func (f *FFmpeg) BuildHLSLadderArgs(input, output string, settings database.TranscodeSettings, durationSec float64) []string {
+	hls := settings.HLS
+	outputDir := filepath.Dir(output)
+	master := hls.MasterPlaylist
+	if master == "" {
+		master = filepath.Base(output)
+	}
+	if master == "." || master == string(filepath.Separator) {
+		master = "master.m3u8"
+	}
+
+	videoCodec := hls.VideoCodec
+	if videoCodec == "" {
+		videoCodec = settings.Video.Codec
+	}
+	if videoCodec == "" {
+		videoCodec = "libx264"
+	}
+	audioCodec := hls.AudioCodec
+	if audioCodec == "" {
+		audioCodec = settings.Audio.Codec
+	}
+	if audioCodec == "" {
+		audioCodec = "aac"
+	}
+	defaultAudioBitrate := hls.AudioBitrate
+	if defaultAudioBitrate == "" {
+		defaultAudioBitrate = settings.Audio.Bitrate
+	}
+	if defaultAudioBitrate == "" {
+		defaultAudioBitrate = "128k"
+	}
+	segmentSeconds := hls.SegmentSeconds
+	if segmentSeconds <= 0 {
+		segmentSeconds = 6
+	}
+
+	args := []string{"-y", "-i", input}
+	var filterParts []string
+	var varStreams []string
+	validRenditions := make([]database.HLSRendition, 0, len(hls.Renditions))
+	for _, rendition := range hls.Renditions {
+		width := rendition.Width
+		height := rendition.Height
+		if width <= 0 || height <= 0 {
+			continue
+		}
+		validRenditions = append(validRenditions, rendition)
+	}
+
+	for i, rendition := range validRenditions {
+		name := cleanRenditionName(rendition, i)
+		width := rendition.Width
+		height := rendition.Height
+		filterParts = append(filterParts, fmt.Sprintf("[0:v]scale=w=%d:h=%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1[v%d]", width, height, width, height, i))
+		varStreams = append(varStreams, fmt.Sprintf("v:%d,a:%d,name:%s", i, i, name))
+	}
+
+	if len(filterParts) == 0 {
+		return f.BuildArgs(input, output, database.TranscodeSettings{
+			Video:      settings.Video,
+			Audio:      settings.Audio,
+			Format:     settings.Format,
+			ExtraFlags: settings.ExtraFlags,
+		}, durationSec)
+	}
+
+	args = append(args, "-filter_complex", strings.Join(filterParts, ";"))
+	for i, rendition := range validRenditions {
+		name := cleanRenditionName(rendition, i)
+		videoBitrate := rendition.VideoBitrate
+		if videoBitrate == "" {
+			videoBitrate = settings.Video.Bitrate
+		}
+		if videoBitrate == "" {
+			videoBitrate = "2500k"
+		}
+		audioBitrate := rendition.AudioBitrate
+		if audioBitrate == "" {
+			audioBitrate = defaultAudioBitrate
+		}
+		args = append(args,
+			"-map", fmt.Sprintf("[v%d]", i),
+			"-map", "0:a:0?",
+			fmt.Sprintf("-c:v:%d", i), videoCodec,
+			fmt.Sprintf("-b:v:%d", i), videoBitrate,
+			fmt.Sprintf("-maxrate:v:%d", i), videoBitrate,
+			fmt.Sprintf("-bufsize:v:%d", i), doubleBitrate(videoBitrate),
+			fmt.Sprintf("-c:a:%d", i), audioCodec,
+			fmt.Sprintf("-b:a:%d", i), audioBitrate,
+			fmt.Sprintf("-ac:a:%d", i), "2",
+		)
+		if hls.Framerate > 0 {
+			args = append(args, fmt.Sprintf("-r:v:%d", i), strconv.Itoa(hls.Framerate))
+		} else if settings.Video.Framerate > 0 {
+			args = append(args, fmt.Sprintf("-r:v:%d", i), strconv.Itoa(settings.Video.Framerate))
+		}
+		if settings.Video.Profile != "" {
+			args = append(args, fmt.Sprintf("-profile:v:%d", i), settings.Video.Profile)
+		}
+		if settings.Video.PixelFormat != "" {
+			args = append(args, fmt.Sprintf("-pix_fmt:v:%d", i), settings.Video.PixelFormat)
+		}
+		if name == "" {
+			name = fmt.Sprintf("v%d", i)
+		}
+	}
+
+	args = append(args,
+		"-f", "hls",
+		"-hls_time", strconv.Itoa(segmentSeconds),
+		"-hls_playlist_type", "vod",
+		"-hls_flags", "independent_segments",
+		"-hls_segment_filename", filepath.Join(outputDir, "%v", "segment_%05d.ts"),
+		"-master_pl_name", master,
+		"-var_stream_map", strings.Join(varStreams, " "),
+		"-progress", "pipe:1",
+		"-stats_period", "1",
+		filepath.Join(outputDir, "%v", "index.m3u8"),
+	)
 	return args
 }
 
@@ -248,6 +375,45 @@ func resolveHWAccel(setting string) string {
 
 func isNVENCCodec(codec string) bool {
 	return strings.Contains(codec, "nvenc")
+}
+
+func cleanRenditionName(r database.HLSRendition, index int) string {
+	name := strings.TrimSpace(r.Name)
+	if name == "" && r.Height > 0 {
+		name = fmt.Sprintf("%dp", r.Height)
+	}
+	if name == "" {
+		name = fmt.Sprintf("v%d", index)
+	}
+	var b strings.Builder
+	for _, ch := range strings.ToLower(name) {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
+			b.WriteRune(ch)
+		}
+	}
+	if b.Len() == 0 {
+		return fmt.Sprintf("v%d", index)
+	}
+	return b.String()
+}
+
+func doubleBitrate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value
+	}
+	unit := ""
+	num := value
+	last := value[len(value)-1]
+	if last < '0' || last > '9' {
+		unit = string(last)
+		num = strings.TrimSpace(value[:len(value)-1])
+	}
+	n, err := strconv.Atoi(num)
+	if err != nil {
+		return value
+	}
+	return fmt.Sprintf("%d%s", n*2, unit)
 }
 
 func parseProgress(r io.Reader, totalDuration float64, cb ProgressCallback) {

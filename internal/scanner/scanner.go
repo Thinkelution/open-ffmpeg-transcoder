@@ -115,6 +115,16 @@ func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSet
 		"hls_prefix":         outputKey,
 	})
 	credsJSON, _ := json.Marshal(creds)
+	var renditions []database.HLSRendition
+	if err := json.Unmarshal([]byte(settings.HLSLadder), &renditions); err != nil || len(renditions) == 0 {
+		renditions = []database.HLSRendition{{
+			Name:         fmt.Sprintf("%dp", settings.HLSHeight),
+			Width:        settings.HLSWidth,
+			Height:       settings.HLSHeight,
+			VideoBitrate: settings.HLSVideoBitrate,
+			AudioBitrate: settings.HLSAudioBitrate,
+		}}
+	}
 
 	return s.db.CreateJob(ctx, &database.CreateJobRequest{
 		Input: database.StorageConfig{
@@ -148,6 +158,15 @@ func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSet
 				"-hls_time", fmt.Sprintf("%d", settings.HLSSegmentSeconds),
 				"-hls_playlist_type", "vod",
 				"-hls_flags", "independent_segments",
+			},
+			HLS: &database.HLSSettings{
+				MasterPlaylist: "master.m3u8",
+				SegmentSeconds: settings.HLSSegmentSeconds,
+				VideoCodec:     settings.HLSVideoCodec,
+				AudioCodec:     settings.HLSAudioCodec,
+				AudioBitrate:   settings.HLSAudioBitrate,
+				Framerate:      settings.HLSFramerate,
+				Renditions:     renditions,
 			},
 		},
 		Priority: settings.ScannerPriority,
