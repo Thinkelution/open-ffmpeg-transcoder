@@ -1,7 +1,6 @@
 package api
 
 import (
-	"html/template"
 	"io/fs"
 	"net/http"
 
@@ -23,10 +22,6 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger())
 	r.Use(middleware.CORS())
-
-	// Load embedded HTML templates
-	tmpl := template.Must(template.New("").ParseFS(web.TemplatesFS, "templates/*.html"))
-	r.SetHTMLTemplate(tmpl)
 
 	// Serve embedded static files
 	staticFS, _ := fs.Sub(web.StaticFS, "static")
