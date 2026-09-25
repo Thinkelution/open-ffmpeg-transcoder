@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -132,12 +133,30 @@ func (f *FFmpeg) Run(ctx context.Context, input, output string, settings databas
 
 // CheckNVIDIA returns true if nvidia GPU encoding is available.
 func (f *FFmpeg) CheckNVIDIA() bool {
+	if !hasNVIDIADevice() {
+		return false
+	}
 	cmd := exec.Command(f.BinaryPath, "-hide_banner", "-encoders")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
 	}
 	return strings.Contains(string(out), "h264_nvenc")
+}
+
+func hasNVIDIADevice() bool {
+	if _, err := os.Stat("/dev/nvidiactl"); err == nil {
+		return true
+	}
+	if matches, err := filepath.Glob("/dev/nvidia[0-9]*"); err == nil && len(matches) > 0 {
+		return true
+	}
+	if _, err := exec.LookPath("nvidia-smi"); err == nil {
+		cmd := exec.Command("nvidia-smi", "-L")
+		out, err := cmd.Output()
+		return err == nil && strings.Contains(strings.ToLower(string(out)), "gpu")
+	}
+	return false
 }
 
 // GetVersion returns the FFmpeg version string.
