@@ -2,7 +2,7 @@
 
 ## System Overview
 
-Open FFmpeg Transcoder is a single Go binary that can run in three modes:
+1transcoder is a single Go binary that can run in three modes:
 
 | Mode | Description | Use Case |
 |------|-------------|----------|

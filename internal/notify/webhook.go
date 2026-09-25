@@ -53,7 +53,7 @@ func SendWebhook(ctx context.Context, webhookURL string, job *database.Job, even
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "OpenFFmpegTranscoder/1.0")
+		req.Header.Set("User-Agent", "1transcoder/1.0")
 
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)

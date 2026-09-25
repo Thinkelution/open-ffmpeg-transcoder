@@ -1,4 +1,4 @@
-# Open FFmpeg Transcoder
+# 1transcoder
 
 A production-grade, API-driven video transcoding service built with Go and FFmpeg. Supports multiple input sources (HTTP, S3, FTP, local), output destinations, NVIDIA GPU acceleration, real-time progress tracking, and a built-in web dashboard. Deployable anywhere with Docker.
 

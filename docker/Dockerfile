@@ -1,5 +1,5 @@
 # ============================================
-# Open FFmpeg Transcoder - CPU Build
+# 1transcoder - CPU Build
 # ============================================
 
 # --- Build Stage ---
