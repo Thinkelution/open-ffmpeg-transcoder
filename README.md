@@ -13,6 +13,7 @@ A production-grade, API-driven video transcoding service built with Go and FFmpe
 - **Hardware analyzer** -- Scores your hardware and estimates parallel transcode capacity
 - **Web dashboard** -- Built-in monitoring UI with job management and system info
 - **Webhook notifications** -- POST callbacks on job completion or failure
+- **Wasabi/S3 bucket scanner** -- Watch a bucket prefix, transcode new video objects to HLS once, and upload results under `hls/<unique-video-key>/`
 - **Docker-ready** -- One command deployment with Docker Compose (CPU and GPU variants)
 - **Single binary** -- API server, worker, and dashboard all in one Go binary
 
@@ -150,6 +151,27 @@ All settings are configured via environment variables. See [.env.example](.env.e
 | `S3_REGION` | `us-east-1` | Default S3 region |
 | `S3_ACCESS_KEY` | (empty) | Default S3 access key |
 | `S3_SECRET_KEY` | (empty) | Default S3 secret key |
+
+### Wasabi/S3 HLS Scanner
+
+Set `SCANNER_ENABLED=true` to watch a Wasabi or S3 bucket for new source videos. The scanner lists `SCANNER_BUCKET` under `SCANNER_INPUT_PREFIX`, skips anything already queued or completed, creates a normal transcode job, and uploads the HLS output to:
+
+```text
+s3://<bucket>/<SCANNER_OUTPUT_PREFIX>/<source-name>-<source-key-hash>/index.m3u8
+```
+
+For Wasabi, use your bucket's region and endpoint, for example:
+
+```bash
+S3_REGION=ap-southeast-1
+S3_ENDPOINT=https://s3.ap-southeast-1.wasabisys.com
+SCANNER_ENABLED=true
+SCANNER_BUCKET=your-bucket
+SCANNER_INPUT_PREFIX=incoming
+SCANNER_OUTPUT_PREFIX=hls
+```
+
+Scanner HLS defaults can be tuned with `HLS_VIDEO_CODEC`, `HLS_VIDEO_BITRATE`, `HLS_WIDTH`, `HLS_HEIGHT`, `HLS_FRAMERATE`, `HLS_AUDIO_CODEC`, `HLS_AUDIO_BITRATE`, and `HLS_SEGMENT_SECONDS`.
 
 ## NVIDIA GPU Setup
 

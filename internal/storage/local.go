@@ -32,6 +32,14 @@ func (l *LocalStorage) Download(_ context.Context, localPath string) error {
 }
 
 func (l *LocalStorage) Upload(_ context.Context, localPath string) error {
+	stat, err := os.Stat(localPath)
+	if err != nil {
+		return fmt.Errorf("stat local path: %w", err)
+	}
+	if stat.IsDir() {
+		return CopyDir(localPath, l.Path)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(l.Path), 0755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}

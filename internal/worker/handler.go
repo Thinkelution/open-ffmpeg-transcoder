@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hibiken/asynq"
 
@@ -18,10 +19,10 @@ import (
 )
 
 type Handler struct {
-	ctx  context.Context
-	cfg  *config.Config
-	db   *database.DB
-	ff   *transcoder.FFmpeg
+	ctx context.Context
+	cfg *config.Config
+	db  *database.DB
+	ff  *transcoder.FFmpeg
 }
 
 func NewHandler(ctx context.Context, cfg *config.Config, db *database.DB, ff *transcoder.FFmpeg) *Handler {
@@ -107,6 +108,15 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 		outputExt = ".mp4"
 	}
 	outputPath := filepath.Join(jobDir, "output"+outputExt)
+	if settings.Format == "hls" {
+		outputDir := filepath.Join(jobDir, "output")
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			h.failJob(jobID, job, fmt.Sprintf("create HLS output dir: %v", err))
+			return nil
+		}
+		outputPath = filepath.Join(outputDir, "index.m3u8")
+		settings.ExtraFlags = ensureHLSSegmentFilename(settings.ExtraFlags, filepath.Join(outputDir, "segment_%05d.ts"))
+	}
 
 	progressCb := func(progress float32, speed string, fps float32) {
 		h.db.UpdateJobProgress(h.ctx, jobID, progress, speed, fps)
@@ -119,7 +129,11 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 	}
 
 	// Gather output file info
-	if stat, err := os.Stat(outputPath); err == nil {
+	statPath := outputPath
+	if settings.Format == "hls" {
+		statPath = filepath.Dir(outputPath)
+	}
+	if stat, err := os.Stat(statPath); err == nil {
 		outProbe, _ := h.ff.Probe(h.ctx, outputPath)
 		outputInfo := map[string]interface{}{
 			"size_bytes": stat.Size(),
@@ -138,8 +152,13 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 		return nil
 	}
 
+	uploadPath := outputPath
+	if settings.Format == "hls" {
+		uploadPath = filepath.Dir(outputPath)
+	}
+
 	log.Printf("[handler] Job %s: uploading to %s", jobID, outputCfg.URL)
-	if err := uploader.Upload(h.ctx, outputPath); err != nil {
+	if err := uploader.Upload(h.ctx, uploadPath); err != nil {
 		h.failJob(jobID, job, fmt.Sprintf("upload: %v", err))
 		return nil
 	}
@@ -156,6 +175,21 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 
 	log.Printf("[handler] Job %s: completed successfully", jobID)
 	return nil
+}
+
+func ensureHLSSegmentFilename(flags []string, pattern string) []string {
+	for i, flag := range flags {
+		if flag == "-hls_segment_filename" || strings.HasPrefix(flag, "-hls_segment_filename ") {
+			return flags
+		}
+		if strings.HasPrefix(flag, "hls_segment_filename=") || strings.HasPrefix(flag, "-hls_segment_filename=") {
+			return flags
+		}
+		if flag == pattern && i > 0 && flags[i-1] == "-hls_segment_filename" {
+			return flags
+		}
+	}
+	return append(flags, "-hls_segment_filename", pattern)
 }
 
 func (h *Handler) failJob(jobID string, job *database.Job, errMsg string) {

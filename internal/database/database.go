@@ -272,6 +272,22 @@ func (db *DB) DeleteJob(ctx context.Context, id string) error {
 	return err
 }
 
+func (db *DB) HasScannerJobForSource(ctx context.Context, bucket, key string) (bool, error) {
+	var exists bool
+	err := db.conn.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM jobs
+			WHERE metadata->>'scanner_bucket' = $1
+			  AND metadata->>'scanner_source_key' = $2
+			  AND status <> 'failed'
+		)
+	`, bucket, key).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check scanner source job: %w", err)
+	}
+	return exists, nil
+}
+
 func (db *DB) GetJobCounts(ctx context.Context) (map[string]int, error) {
 	rows, err := db.conn.QueryContext(ctx, "SELECT status, COUNT(*) FROM jobs GROUP BY status")
 	if err != nil {

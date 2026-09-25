@@ -25,6 +25,22 @@ type Config struct {
 	S3AccessKey string
 	S3SecretKey string
 	S3Endpoint  string
+
+	// Bucket scanner
+	ScannerEnabled      bool
+	ScannerIntervalSec  int
+	ScannerBucket       string
+	ScannerInputPrefix  string
+	ScannerOutputPrefix string
+	ScannerPriority     int
+	HLSVideoCodec       string
+	HLSVideoBitrate     string
+	HLSWidth            int
+	HLSHeight           int
+	HLSFramerate        int
+	HLSAudioCodec       string
+	HLSAudioBitrate     string
+	HLSSegmentSeconds   int
 }
 
 func Load() *Config {
@@ -45,6 +61,21 @@ func Load() *Config {
 		S3AccessKey:  getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:  getEnv("S3_SECRET_KEY", ""),
 		S3Endpoint:   getEnv("S3_ENDPOINT", ""),
+
+		ScannerEnabled:      getEnvBool("SCANNER_ENABLED", false),
+		ScannerIntervalSec:  getEnvInt("SCANNER_INTERVAL_SECONDS", 60),
+		ScannerBucket:       getEnv("SCANNER_BUCKET", ""),
+		ScannerInputPrefix:  strings.Trim(strings.TrimPrefix(getEnv("SCANNER_INPUT_PREFIX", ""), "/"), " "),
+		ScannerOutputPrefix: strings.Trim(strings.Trim(getEnv("SCANNER_OUTPUT_PREFIX", "hls"), "/"), " "),
+		ScannerPriority:     getEnvInt("SCANNER_PRIORITY", 5),
+		HLSVideoCodec:       getEnv("HLS_VIDEO_CODEC", "libx264"),
+		HLSVideoBitrate:     getEnv("HLS_VIDEO_BITRATE", "2500k"),
+		HLSWidth:            getEnvInt("HLS_WIDTH", 1280),
+		HLSHeight:           getEnvInt("HLS_HEIGHT", 720),
+		HLSFramerate:        getEnvInt("HLS_FRAMERATE", 30),
+		HLSAudioCodec:       getEnv("HLS_AUDIO_CODEC", "aac"),
+		HLSAudioBitrate:     getEnv("HLS_AUDIO_BITRATE", "128k"),
+		HLSSegmentSeconds:   getEnvInt("HLS_SEGMENT_SECONDS", 6),
 	}
 }
 
@@ -59,6 +90,18 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
 		}
 	}
 	return fallback

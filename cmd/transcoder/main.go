@@ -13,6 +13,7 @@ import (
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/api"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/config"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/database"
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/scanner"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/worker"
 )
 
@@ -49,8 +50,10 @@ func main() {
 		srv = startAPI(cfg, db)
 	case "worker":
 		w = startWorker(ctx, cfg, db)
+		scanner.New(cfg, db).Start(ctx)
 	case "all":
 		w = startWorker(ctx, cfg, db)
+		scanner.New(cfg, db).Start(ctx)
 		srv = startAPI(cfg, db)
 	default:
 		fmt.Fprintf(os.Stderr, "Usage: %s [serve|worker|all]\n", os.Args[0])
