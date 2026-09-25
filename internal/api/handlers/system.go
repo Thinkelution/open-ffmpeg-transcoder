@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/analyzer"
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/appsettings"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/config"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/database"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/transcoder"
@@ -29,9 +30,9 @@ func (h *SystemHandler) Health(c *gin.Context) {
 	counts, _ := h.db.GetJobCounts(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":     "ok",
-		"version":    "1.0.0",
-		"jobs":       counts,
+		"status":  "ok",
+		"version": "1.0.0",
+		"jobs":    counts,
 	})
 }
 
@@ -82,4 +83,31 @@ func (h *SystemHandler) Benchmark(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *SystemHandler) GetSettings(c *gin.Context) {
+	settings, err := appsettings.Load(c.Request.Context(), h.db, h.cfg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, settings.AppSettings)
+}
+
+func (h *SystemHandler) UpdateSettings(c *gin.Context) {
+	var req database.UpdateAppSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := appsettings.Save(c.Request.Context(), h.db, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	settings, err := appsettings.Load(c.Request.Context(), h.db, h.cfg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, settings.AppSettings)
 }

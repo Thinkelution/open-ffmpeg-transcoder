@@ -1,0 +1,117 @@
+{{template "layout" .}}
+{{define "content"}}
+<div x-data="settingsPage()" x-init="load()">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Settings</h1>
+            <p class="text-sm text-gray-400 mt-1">Configure the Wasabi scanner and HLS output profile.</p>
+        </div>
+        <button @click="save()" :disabled="saving" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+            <span x-show="!saving">Save settings</span>
+            <span x-show="saving">Saving...</span>
+        </button>
+    </div>
+
+    <div x-show="message" class="mb-6 rounded-lg border px-4 py-3 text-sm" :class="messageType === 'error' ? 'border-red-900/70 bg-red-950/40 text-red-200' : 'border-emerald-900/70 bg-emerald-950/40 text-emerald-200'" x-text="message"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section class="bg-gray-900 rounded-lg border border-gray-800 p-6">
+            <h2 class="text-lg font-semibold mb-4">Wasabi Scanner</h2>
+            <div class="space-y-4">
+                <label class="flex items-center gap-3">
+                    <input type="checkbox" x-model="form.scanner_enabled" class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-emerald-600">
+                    <span class="text-sm">Scan bucket for new videos</span>
+                </label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="block">
+                        <span class="text-sm text-gray-300">Bucket</span>
+                        <input x-model="form.scanner_bucket" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="my-video-bucket">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm text-gray-300">Region</span>
+                        <input x-model="form.s3_region" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="us-east-1">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm text-gray-300">Endpoint</span>
+                        <input x-model="form.s3_endpoint" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="https://s3.wasabisys.com">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm text-gray-300">Scan interval seconds</span>
+                        <input type="number" min="10" x-model.number="form.scanner_interval_seconds" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    </label>
+                    <label class="block md:col-span-2">
+                        <span class="text-sm text-gray-300">Access key</span>
+                        <input x-model="form.s3_access_key" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" autocomplete="off">
+                    </label>
+                    <label class="block md:col-span-2">
+                        <span class="text-sm text-gray-300">Secret key</span>
+                        <input type="password" x-model="form.s3_secret_key" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" autocomplete="new-password" :placeholder="form.s3_secret_configured ? 'Secret is configured. Leave blank to keep it.' : 'Paste secret key'">
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-gray-900 rounded-lg border border-gray-800 p-6">
+            <h2 class="text-lg font-semibold mb-4">Source and Destination</h2>
+            <div class="space-y-4">
+                <label class="block">
+                    <span class="text-sm text-gray-300">Input prefix</span>
+                    <input x-model="form.scanner_input_prefix" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="incoming">
+                    <span class="block text-xs text-gray-500 mt-1">Leave empty to scan the bucket root. Files under the HLS output prefix are ignored.</span>
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Output prefix</span>
+                    <input x-model="form.scanner_output_prefix" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="hls">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Output template</span>
+                    <input x-model="form.scanner_output_template" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="file_base_name/hls/*">
+                    <span class="block text-xs text-gray-500 mt-1">Supports file_base_name, source_hash, source_dir. A trailing * means write index.m3u8 and segments in that folder.</span>
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Queue priority</span>
+                    <input type="number" min="1" max="10" x-model.number="form.scanner_priority" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                </label>
+            </div>
+        </section>
+
+        <section class="bg-gray-900 rounded-lg border border-gray-800 p-6 lg:col-span-2">
+            <h2 class="text-lg font-semibold mb-4">HLS Profile</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <label class="block">
+                    <span class="text-sm text-gray-300">Video codec</span>
+                    <input x-model="form.hls_video_codec" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="libx264">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Video bitrate</span>
+                    <input x-model="form.hls_video_bitrate" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="2500k">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Width</span>
+                    <input type="number" min="1" x-model.number="form.hls_width" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Height</span>
+                    <input type="number" min="1" x-model.number="form.hls_height" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Frame rate</span>
+                    <input type="number" min="1" x-model.number="form.hls_framerate" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Audio codec</span>
+                    <input x-model="form.hls_audio_codec" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="aac">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Audio bitrate</span>
+                    <input x-model="form.hls_audio_bitrate" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="128k">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">Segment seconds</span>
+                    <input type="number" min="1" x-model.number="form.hls_segment_seconds" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                </label>
+            </div>
+        </section>
+    </div>
+</div>
+{{end}}

@@ -32,17 +32,24 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	staticFS, _ := fs.Sub(web.StaticFS, "static")
 	r.StaticFS("/static", http.FS(staticFS))
 
+	auth := middleware.NewSessionAuth(cfg)
+
 	// Dashboard routes
-	dash := handlers.NewDashboardHandler(cfg, db)
-	r.GET("/", dash.Index)
-	r.GET("/jobs", dash.JobsPage)
-	r.GET("/system", dash.SystemPage)
+	dash := handlers.NewDashboardHandler(cfg, db, auth)
+	r.GET("/login", dash.LoginPage)
+	r.POST("/login", dash.LoginPost)
+	r.GET("/logout", dash.Logout)
+
+	dashboard := r.Group("/")
+	dashboard.Use(auth.RequireDashboard())
+	dashboard.GET("/", dash.Index)
+	dashboard.GET("/jobs", dash.JobsPage)
+	dashboard.GET("/system", dash.SystemPage)
+	dashboard.GET("/settings", dash.SettingsPage)
 
 	// API routes
 	v1 := r.Group("/api/v1")
-	if cfg.APIKey != "" {
-		v1.Use(middleware.APIKeyAuth(cfg.APIKey))
-	}
+	v1.Use(auth.RequireAPI())
 	v1.Use(middleware.RateLimit())
 
 	jobH := handlers.NewJobHandler(cfg, db)
@@ -64,6 +71,8 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	v1.GET("/system/info", sysH.Info)
 	v1.GET("/system/analyze", sysH.Analyze)
 	v1.POST("/system/benchmark", sysH.Benchmark)
+	v1.GET("/settings", sysH.GetSettings)
+	v1.PUT("/settings", sysH.UpdateSettings)
 
 	mediaH := handlers.NewMediaHandler(cfg)
 	v1.POST("/media/probe", mediaH.Probe)

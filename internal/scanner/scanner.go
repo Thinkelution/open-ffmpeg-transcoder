@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/appsettings"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/config"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/database"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/storage"
@@ -29,46 +30,47 @@ func New(cfg *config.Config, db *database.DB) *Scanner {
 }
 
 func (s *Scanner) Start(ctx context.Context) {
-	if !s.cfg.ScannerEnabled {
-		return
-	}
-	if s.cfg.ScannerBucket == "" {
-		log.Println("[scanner] SCANNER_ENABLED=true but SCANNER_BUCKET is empty; scanner disabled")
-		return
-	}
-
-	interval := time.Duration(s.cfg.ScannerIntervalSec) * time.Second
-	if interval <= 0 {
-		interval = time.Minute
-	}
-
 	go func() {
-		log.Printf("[scanner] Watching s3://%s/%s every %s", s.cfg.ScannerBucket, s.cfg.ScannerInputPrefix, interval)
-		s.scanOnce(ctx)
+		log.Println("[scanner] Started")
 
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
 		for {
+			settings, err := appsettings.Load(ctx, s.db, s.cfg)
+			if err != nil {
+				log.Printf("[scanner] Could not load settings: %v", err)
+			} else if settings.ScannerEnabled {
+				s.scanOnce(ctx, settings)
+			}
+
+			interval := time.Duration(settings.ScannerIntervalSec) * time.Second
+			if interval <= 0 {
+				interval = time.Minute
+			}
+			timer := time.NewTimer(interval)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				log.Println("[scanner] Stopped")
 				return
-			case <-ticker.C:
-				s.scanOnce(ctx)
+			case <-timer.C:
 			}
 		}
 	}()
 }
 
-func (s *Scanner) scanOnce(ctx context.Context) {
-	creds := storage.S3Credentials{
-		AccessKeyID:     s.cfg.S3AccessKey,
-		SecretAccessKey: s.cfg.S3SecretKey,
-		Region:          s.cfg.S3Region,
-		Endpoint:        s.cfg.S3Endpoint,
+func (s *Scanner) scanOnce(ctx context.Context, settings appsettings.RuntimeSettings) {
+	if settings.ScannerBucket == "" {
+		log.Println("[scanner] Scanner is enabled but bucket is empty")
+		return
 	}
 
-	objects, err := storage.ListObjects(ctx, creds, s.cfg.ScannerBucket, s.normalizedInputPrefix())
+	creds := storage.S3Credentials{
+		AccessKeyID:     settings.S3AccessKey,
+		SecretAccessKey: settings.S3SecretKey,
+		Region:          settings.S3Region,
+		Endpoint:        settings.S3Endpoint,
+	}
+
+	objects, err := storage.ListObjects(ctx, creds, settings.ScannerBucket, normalizedInputPrefix(settings.ScannerInputPrefix))
 	if err != nil {
 		log.Printf("[scanner] List failed: %v", err)
 		return
@@ -79,11 +81,11 @@ func (s *Scanner) scanOnce(ctx context.Context) {
 			continue
 		}
 		key := *object.Key
-		if !s.shouldProcess(key) {
+		if !shouldProcess(key, settings.ScannerOutputPrefix) {
 			continue
 		}
 
-		exists, err := s.db.HasScannerJobForSource(ctx, s.cfg.ScannerBucket, key)
+		exists, err := s.db.HasScannerJobForSource(ctx, settings.ScannerBucket, key)
 		if err != nil {
 			log.Printf("[scanner] Could not check %s: %v", key, err)
 			continue
@@ -92,7 +94,7 @@ func (s *Scanner) scanOnce(ctx context.Context) {
 			continue
 		}
 
-		job, err := s.createJob(ctx, key)
+		job, err := s.createJob(ctx, settings, creds, key)
 		if err != nil {
 			log.Printf("[scanner] Could not create job for %s: %v", key, err)
 			continue
@@ -105,56 +107,59 @@ func (s *Scanner) scanOnce(ctx context.Context) {
 	}
 }
 
-func (s *Scanner) createJob(ctx context.Context, key string) (*database.Job, error) {
-	outputKey := path.Join(s.normalizedOutputPrefix(), uniqueFolder(key)) + "/"
+func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSettings, creds storage.S3Credentials, key string) (*database.Job, error) {
+	outputKey := outputPrefixForKey(settings, key)
 	metadata, _ := json.Marshal(map[string]string{
-		"scanner_bucket":     s.cfg.ScannerBucket,
+		"scanner_bucket":     settings.ScannerBucket,
 		"scanner_source_key": key,
 		"hls_prefix":         outputKey,
 	})
+	credsJSON, _ := json.Marshal(creds)
 
 	return s.db.CreateJob(ctx, &database.CreateJobRequest{
 		Input: database.StorageConfig{
-			Type: "s3",
-			URL:  fmt.Sprintf("s3://%s/%s", s.cfg.ScannerBucket, key),
+			Type:        "s3",
+			URL:         fmt.Sprintf("s3://%s/%s", settings.ScannerBucket, key),
+			Credentials: credsJSON,
 		},
 		Output: database.StorageConfig{
-			Type: "s3",
-			URL:  fmt.Sprintf("s3://%s/%s", s.cfg.ScannerBucket, outputKey),
+			Type:        "s3",
+			URL:         fmt.Sprintf("s3://%s/%s", settings.ScannerBucket, outputKey),
+			Credentials: credsJSON,
 		},
 		Settings: database.TranscodeSettings{
 			Video: database.VideoSettings{
-				Codec:       s.cfg.HLSVideoCodec,
-				Bitrate:     s.cfg.HLSVideoBitrate,
-				Width:       s.cfg.HLSWidth,
-				Height:      s.cfg.HLSHeight,
-				Framerate:   s.cfg.HLSFramerate,
+				Codec:       settings.HLSVideoCodec,
+				Bitrate:     settings.HLSVideoBitrate,
+				Width:       settings.HLSWidth,
+				Height:      settings.HLSHeight,
+				Framerate:   settings.HLSFramerate,
 				Profile:     "main",
 				PixelFormat: "yuv420p",
 			},
 			Audio: database.AudioSettings{
-				Codec:      s.cfg.HLSAudioCodec,
-				Bitrate:    s.cfg.HLSAudioBitrate,
+				Codec:      settings.HLSAudioCodec,
+				Bitrate:    settings.HLSAudioBitrate,
 				Channels:   2,
 				SampleRate: 48000,
 			},
 			Format: "hls",
 			ExtraFlags: []string{
-				"-hls_time", fmt.Sprintf("%d", s.cfg.HLSSegmentSeconds),
+				"-hls_time", fmt.Sprintf("%d", settings.HLSSegmentSeconds),
 				"-hls_playlist_type", "vod",
 				"-hls_flags", "independent_segments",
 			},
 		},
-		Priority: s.cfg.ScannerPriority,
+		Priority: settings.ScannerPriority,
 		Metadata: metadata,
 	})
 }
 
-func (s *Scanner) shouldProcess(key string) bool {
+func shouldProcess(key, outputPrefix string) bool {
 	if strings.HasSuffix(key, "/") {
 		return false
 	}
-	if strings.HasPrefix(key, s.normalizedOutputPrefix()+"/") {
+	if outputPrefix != "" && strings.HasPrefix(key, normalizedOutputPrefix(outputPrefix)+"/") {
 		return false
 	}
 	switch strings.ToLower(filepath.Ext(key)) {
@@ -165,8 +170,8 @@ func (s *Scanner) shouldProcess(key string) bool {
 	}
 }
 
-func (s *Scanner) normalizedInputPrefix() string {
-	prefix := strings.Trim(s.cfg.ScannerInputPrefix, "/")
+func normalizedInputPrefix(value string) string {
+	prefix := strings.Trim(value, "/")
 	if prefix == "." {
 		return ""
 	}
@@ -176,23 +181,66 @@ func (s *Scanner) normalizedInputPrefix() string {
 	return prefix + "/"
 }
 
-func (s *Scanner) normalizedOutputPrefix() string {
-	prefix := strings.Trim(s.cfg.ScannerOutputPrefix, "/")
+func normalizedOutputPrefix(value string) string {
+	prefix := strings.Trim(value, "/")
 	if prefix == "" || prefix == "." {
 		return "hls"
 	}
 	return prefix
 }
 
+func outputPrefixForKey(settings appsettings.RuntimeSettings, key string) string {
+	template := strings.TrimSpace(settings.ScannerOutputTemplate)
+	if template == "" {
+		return path.Join(normalizedOutputPrefix(settings.ScannerOutputPrefix), uniqueFolder(key)) + "/"
+	}
+
+	template = strings.TrimPrefix(template, "/")
+	template = strings.TrimSuffix(template, "/")
+	template = strings.TrimSuffix(template, "/*")
+	if template == "" {
+		return path.Join(normalizedOutputPrefix(settings.ScannerOutputPrefix), uniqueFolder(key)) + "/"
+	}
+
+	base := fileBaseName(key)
+	hash := sourceHash(key)
+	sourceDir := strings.Trim(path.Dir(key), ".")
+	sourceDir = strings.Trim(sourceDir, "/")
+
+	replacer := strings.NewReplacer(
+		"{file_base_name}", base,
+		"{source_hash}", hash,
+		"{source_dir}", sourceDir,
+		"file_base_name", base,
+		"source_hash", hash,
+		"source_dir", sourceDir,
+	)
+	template = replacer.Replace(template)
+
+	template = strings.Trim(template, "/")
+	if template == "" {
+		template = uniqueFolder(key)
+	}
+	return template + "/"
+}
+
 var unsafeKeyChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 func uniqueFolder(key string) string {
+	return fmt.Sprintf("%s-%s", fileBaseName(key), sourceHash(key))
+}
+
+func fileBaseName(key string) string {
 	ext := filepath.Ext(key)
 	base := strings.TrimSuffix(path.Base(key), ext)
 	base = strings.Trim(unsafeKeyChars.ReplaceAllString(base, "-"), "-._")
 	if base == "" {
 		base = "video"
 	}
+	return strings.ToLower(base)
+}
+
+func sourceHash(key string) string {
 	sum := sha1.Sum([]byte(key))
-	return fmt.Sprintf("%s-%s", strings.ToLower(base), hex.EncodeToString(sum[:])[:12])
+	return hex.EncodeToString(sum[:])[:12]
 }

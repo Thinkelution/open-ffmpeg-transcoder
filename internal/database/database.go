@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -415,4 +416,69 @@ func (db *DB) DeletePreset(ctx context.Context, id string) error {
 		return fmt.Errorf("preset not found or is a system preset")
 	}
 	return nil
+}
+
+func (db *DB) GetSettingsMap(ctx context.Context) (map[string]string, error) {
+	rows, err := db.conn.QueryContext(ctx, "SELECT key, value FROM app_settings")
+	if err != nil {
+		return nil, fmt.Errorf("get settings: %w", err)
+	}
+	defer rows.Close()
+
+	settings := map[string]string{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("scan setting: %w", err)
+		}
+		settings[key] = value
+	}
+	return settings, nil
+}
+
+func (db *DB) UpdateSettingsMap(ctx context.Context, settings map[string]string) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin settings update: %w", err)
+	}
+	defer tx.Rollback()
+
+	for key, value := range settings {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO app_settings (key, value, updated_at)
+			VALUES ($1, $2, NOW())
+			ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+		`, key, value); err != nil {
+			return fmt.Errorf("update setting %s: %w", key, err)
+		}
+	}
+	return tx.Commit()
+}
+
+func BoolSetting(settings map[string]string, key string, fallback bool) bool {
+	if value, ok := settings[key]; ok {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		}
+	}
+	return fallback
+}
+
+func IntSetting(settings map[string]string, key string, fallback int) int {
+	if value, ok := settings[key]; ok {
+		if i, err := strconv.Atoi(strings.TrimSpace(value)); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func StringSetting(settings map[string]string, key, fallback string) string {
+	if value, ok := settings[key]; ok && value != "" {
+		return value
+	}
+	return fallback
 }

@@ -41,6 +41,15 @@ async function apiPost(url, body) {
     return resp.json();
 }
 
+async function apiPut(url, body) {
+    const resp = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    return resp.json();
+}
+
 async function apiDelete(url) {
     const resp = await fetch(url, { method: 'DELETE' });
     return resp.json();
@@ -165,6 +174,70 @@ function systemPage() {
                 console.error('Benchmark error:', e);
             }
             this.benchmarking = false;
+        }
+    };
+}
+
+function settingsPage() {
+    return {
+        saving: false,
+        message: '',
+        messageType: 'success',
+        form: {
+            scanner_enabled: false,
+            scanner_interval_seconds: 60,
+            scanner_bucket: '',
+            scanner_input_prefix: '',
+            scanner_output_prefix: 'hls',
+            scanner_output_template: 'file_base_name/hls/*',
+            scanner_priority: 5,
+            s3_region: 'us-east-1',
+            s3_access_key: '',
+            s3_secret_key: '',
+            s3_secret_configured: false,
+            s3_endpoint: 'https://s3.wasabisys.com',
+            hls_video_codec: 'libx264',
+            hls_video_bitrate: '2500k',
+            hls_width: 1280,
+            hls_height: 720,
+            hls_framerate: 30,
+            hls_audio_codec: 'aac',
+            hls_audio_bitrate: '128k',
+            hls_segment_seconds: 6,
+        },
+
+        async load() {
+            try {
+                const data = await apiGet('/api/v1/settings');
+                this.form = { ...this.form, ...data, s3_secret_key: '' };
+            } catch (e) {
+                this.showMessage('Could not load settings.', 'error');
+                console.error('Settings load error:', e);
+            }
+        },
+
+        async save() {
+            this.saving = true;
+            this.message = '';
+            try {
+                const payload = { ...this.form };
+                const data = await apiPut('/api/v1/settings', payload);
+                if (data.error) {
+                    this.showMessage(data.error, 'error');
+                } else {
+                    this.form = { ...this.form, ...data, s3_secret_key: '' };
+                    this.showMessage('Settings saved. The scanner will use them on the next scan.', 'success');
+                }
+            } catch (e) {
+                this.showMessage('Could not save settings.', 'error');
+                console.error('Settings save error:', e);
+            }
+            this.saving = false;
+        },
+
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
         }
     };
 }

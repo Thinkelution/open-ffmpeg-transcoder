@@ -8,13 +8,13 @@ import (
 type JobStatus string
 
 const (
-	JobStatusPending      JobStatus = "pending"
-	JobStatusDownloading  JobStatus = "downloading"
-	JobStatusTranscoding  JobStatus = "transcoding"
-	JobStatusUploading    JobStatus = "uploading"
-	JobStatusCompleted    JobStatus = "completed"
-	JobStatusFailed       JobStatus = "failed"
-	JobStatusCancelled    JobStatus = "cancelled"
+	JobStatusPending     JobStatus = "pending"
+	JobStatusDownloading JobStatus = "downloading"
+	JobStatusTranscoding JobStatus = "transcoding"
+	JobStatusUploading   JobStatus = "uploading"
+	JobStatusCompleted   JobStatus = "completed"
+	JobStatusFailed      JobStatus = "failed"
+	JobStatusCancelled   JobStatus = "cancelled"
 )
 
 type Job struct {
@@ -113,4 +113,48 @@ type JobListParams struct {
 	Status string
 	Limit  int
 	Offset int
+}
+
+type AppSettings struct {
+	ScannerEnabled        bool   `json:"scanner_enabled"`
+	ScannerIntervalSec    int    `json:"scanner_interval_seconds"`
+	ScannerBucket         string `json:"scanner_bucket"`
+	ScannerInputPrefix    string `json:"scanner_input_prefix"`
+	ScannerOutputPrefix   string `json:"scanner_output_prefix"`
+	ScannerOutputTemplate string `json:"scanner_output_template"`
+	ScannerPriority       int    `json:"scanner_priority"`
+	S3Region              string `json:"s3_region"`
+	S3AccessKey           string `json:"s3_access_key"`
+	S3SecretConfigured    bool   `json:"s3_secret_configured"`
+	S3Endpoint            string `json:"s3_endpoint"`
+	HLSVideoCodec         string `json:"hls_video_codec"`
+	HLSVideoBitrate       string `json:"hls_video_bitrate"`
+	HLSWidth              int    `json:"hls_width"`
+	HLSHeight             int    `json:"hls_height"`
+	HLSFramerate          int    `json:"hls_framerate"`
+	HLSAudioCodec         string `json:"hls_audio_codec"`
+	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
+	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
+}
+
+type UpdateAppSettingsRequest struct {
+	ScannerEnabled        bool   `json:"scanner_enabled"`
+	ScannerIntervalSec    int    `json:"scanner_interval_seconds"`
+	ScannerBucket         string `json:"scanner_bucket"`
+	ScannerInputPrefix    string `json:"scanner_input_prefix"`
+	ScannerOutputPrefix   string `json:"scanner_output_prefix"`
+	ScannerOutputTemplate string `json:"scanner_output_template"`
+	ScannerPriority       int    `json:"scanner_priority"`
+	S3Region              string `json:"s3_region"`
+	S3AccessKey           string `json:"s3_access_key"`
+	S3SecretKey           string `json:"s3_secret_key"`
+	S3Endpoint            string `json:"s3_endpoint"`
+	HLSVideoCodec         string `json:"hls_video_codec"`
+	HLSVideoBitrate       string `json:"hls_video_bitrate"`
+	HLSWidth              int    `json:"hls_width"`
+	HLSHeight             int    `json:"hls_height"`
+	HLSFramerate          int    `json:"hls_framerate"`
+	HLSAudioCodec         string `json:"hls_audio_codec"`
+	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
+	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
 }

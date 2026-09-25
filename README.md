@@ -145,6 +145,9 @@ All settings are configured via environment variables. See [.env.example](.env.e
 | `DATABASE_URL` | `postgres://...` | PostgreSQL connection string |
 | `REDIS_ADDR` | `localhost:6379` | Redis address |
 | `API_KEY` | (empty) | API key for authentication (disabled if empty) |
+| `DASHBOARD_USER` | `admin` | Dashboard login username |
+| `DASHBOARD_PASSWORD` | `API_KEY` | Dashboard login password |
+| `SESSION_SECRET` | `API_KEY` | Secret used to sign dashboard sessions |
 | `MAX_WORKERS` | `2` | Maximum concurrent transcoding jobs |
 | `FFMPEG_PATH` | `ffmpeg` | Path to FFmpeg binary |
 | `TEMP_DIR` | `/tmp/transcoder` | Temporary directory for intermediate files |
@@ -172,6 +175,10 @@ SCANNER_OUTPUT_PREFIX=hls
 ```
 
 Scanner HLS defaults can be tuned with `HLS_VIDEO_CODEC`, `HLS_VIDEO_BITRATE`, `HLS_WIDTH`, `HLS_HEIGHT`, `HLS_FRAMERATE`, `HLS_AUDIO_CODEC`, `HLS_AUDIO_BITRATE`, and `HLS_SEGMENT_SECONDS`.
+
+These values can also be changed in the dashboard under **Settings** after signing in. The Wasabi secret is write-only from the browser: leave it blank to keep the current value.
+
+Use `SCANNER_OUTPUT_TEMPLATE` when you need a specific destination layout. For example, `file_base_name/hls/*` stores a source file named `trailer.mp4` at `trailer/hls/index.m3u8` with segments in the same folder. Supported template tokens are `file_base_name`, `source_hash`, and `source_dir`.
 
 ## NVIDIA GPU Setup
 
