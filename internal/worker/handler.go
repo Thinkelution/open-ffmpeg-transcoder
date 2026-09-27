@@ -98,6 +98,9 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 	if err == nil {
 		infoJSON, _ := json.Marshal(probeResult)
 		h.db.UpdateJobInputInfo(h.ctx, jobID, infoJSON)
+		if settings.HLS != nil {
+			settings.HLS.AudioTracks = countAudioStreams(probeResult)
+		}
 	}
 
 	durationSec, _ := h.ff.GetDurationSeconds(h.ctx, inputPath)
@@ -224,6 +227,19 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 
 	log.Printf("[handler] Job %s: completed successfully", jobID)
 	return nil
+}
+
+func countAudioStreams(probe *transcoder.ProbeResult) int {
+	if probe == nil {
+		return 0
+	}
+	count := 0
+	for _, stream := range probe.Streams {
+		if stream.CodecType == "audio" {
+			count++
+		}
+	}
+	return count
 }
 
 func thumbnailTimestamp(durationSec float64) float64 {

@@ -94,6 +94,7 @@ type HLSSettings struct {
 	Framerate      int            `json:"framerate,omitempty"`
 	FramerateValue string         `json:"framerate_value,omitempty"`
 	GOPFrames      int            `json:"gop_frames,omitempty"`
+	AudioTracks    int            `json:"audio_tracks,omitempty"`
 	Renditions     []HLSRendition `json:"renditions,omitempty"`
 }
 

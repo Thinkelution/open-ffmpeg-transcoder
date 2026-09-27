@@ -169,12 +169,17 @@ func (f *FFmpeg) BuildHLSLadderArgs(input, output string, settings database.Tran
 		validRenditions = append(validRenditions, rendition)
 	}
 
+	hasAudio := hls.AudioTracks > 0
 	for i, rendition := range validRenditions {
 		name := cleanRenditionName(rendition, i)
 		width := rendition.Width
 		height := rendition.Height
 		filterParts = append(filterParts, fmt.Sprintf("[0:v]scale=w=%d:h=%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1[v%d]", width, height, width, height, i))
-		varStreams = append(varStreams, fmt.Sprintf("v:%d,a:%d,name:%s", i, i, name))
+		if hasAudio {
+			varStreams = append(varStreams, fmt.Sprintf("v:%d,a:%d,name:%s", i, i, name))
+		} else {
+			varStreams = append(varStreams, fmt.Sprintf("v:%d,name:%s", i, name))
+		}
 	}
 
 	if len(filterParts) == 0 {
@@ -202,7 +207,6 @@ func (f *FFmpeg) BuildHLSLadderArgs(input, output string, settings database.Tran
 		}
 		args = append(args,
 			"-map", fmt.Sprintf("[v%d]", i),
-			"-map", "0:a:0?",
 			fmt.Sprintf("-c:v:%d", i), videoCodec,
 			fmt.Sprintf("-b:v:%d", i), videoBitrate,
 			fmt.Sprintf("-minrate:v:%d", i), videoBitrate,
@@ -211,11 +215,16 @@ func (f *FFmpeg) BuildHLSLadderArgs(input, output string, settings database.Tran
 			fmt.Sprintf("-g:v:%d", i), strconv.Itoa(gopFrames),
 			fmt.Sprintf("-keyint_min:v:%d", i), strconv.Itoa(gopFrames),
 			fmt.Sprintf("-sc_threshold:v:%d", i), "0",
-			fmt.Sprintf("-c:a:%d", i), audioCodec,
-			fmt.Sprintf("-b:a:%d", i), audioBitrate,
-			fmt.Sprintf("-ac:a:%d", i), "2",
-			fmt.Sprintf("-ar:a:%d", i), "48000",
 		)
+		if hasAudio {
+			args = append(args,
+				"-map", "0:a:0",
+				fmt.Sprintf("-c:a:%d", i), audioCodec,
+				fmt.Sprintf("-b:a:%d", i), audioBitrate,
+				fmt.Sprintf("-ac:a:%d", i), "2",
+				fmt.Sprintf("-ar:a:%d", i), "48000",
+			)
+		}
 		if frameRate != "" {
 			args = append(args, fmt.Sprintf("-r:v:%d", i), frameRate)
 		}
