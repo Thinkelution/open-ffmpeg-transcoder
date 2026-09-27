@@ -111,7 +111,7 @@ function dashboard() {
             if (!video || !video.share_url) return;
             try {
                 await navigator.clipboard.writeText(video.share_url);
-                this.shareMessage = 'Signed playback link copied';
+                this.shareMessage = 'Playback link copied';
                 setTimeout(() => { this.shareMessage = ''; }, 2500);
             } catch (e) {
                 this.shareMessage = video.share_url;
@@ -169,7 +169,7 @@ function dashboard() {
 
         startPolling() {
             this.refresh();
-            setInterval(() => this.refresh(), 3000);
+            setInterval(() => this.refresh(), 30000);
         }
     };
 }

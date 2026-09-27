@@ -272,12 +272,8 @@ func (h *MediaHandler) PublicHLS(c *gin.Context) {
 	contentType := contentTypeForHLSAsset(assetPath)
 	if strings.HasSuffix(strings.ToLower(assetPath), ".m3u8") {
 		h.streamStorageObjectWithRewriter(c, assetCfg, contentType, func(body string) string {
-			return h.rewritePresignedHLSPlaylist(c, body, outputCfg, assetPath, 24*time.Hour)
+			return rewriteHLSPlaylist(string(body), c.Request.URL.Path)
 		})
-		return
-	}
-	if signedURL, err := storage.PresignGetObject(c.Request.Context(), assetCfg, h.cfg, 24*time.Hour); err == nil {
-		c.Redirect(http.StatusFound, signedURL)
 		return
 	}
 	h.streamStorageObject(c, assetCfg, contentType, false)
@@ -319,12 +315,8 @@ func (h *MediaHandler) HLS(c *gin.Context) {
 	contentType := contentTypeForHLSAsset(assetPath)
 	if strings.HasSuffix(strings.ToLower(assetPath), ".m3u8") {
 		h.streamStorageObjectWithRewriter(c, assetCfg, contentType, func(body string) string {
-			return h.rewritePresignedHLSPlaylist(c, body, outputCfg, assetPath, 24*time.Hour)
+			return rewriteHLSPlaylist(string(body), c.Request.URL.Path)
 		})
-		return
-	}
-	if signedURL, err := storage.PresignGetObject(c.Request.Context(), assetCfg, h.cfg, 24*time.Hour); err == nil {
-		c.Redirect(http.StatusFound, signedURL)
 		return
 	}
 	h.streamStorageObject(c, assetCfg, contentType, false)
