@@ -223,14 +223,20 @@ func (db *DB) ListJobs(ctx context.Context, params JobListParams) ([]*Job, int, 
 
 func (db *DB) UpdateJobStatus(ctx context.Context, id string, status JobStatus) error {
 	extra := ""
+	clearError := ", error_message = ''"
 	switch status {
-	case JobStatusDownloading, JobStatusTranscoding:
+	case JobStatusPending:
+		extra = ", completed_at = NULL, duration_ms = 0"
+	case JobStatusDownloading, JobStatusTranscoding, JobStatusUploading:
 		extra = ", started_at = COALESCE(started_at, NOW())"
-	case JobStatusCompleted, JobStatusFailed, JobStatusCancelled:
+	case JobStatusCompleted:
+		extra = ", completed_at = NOW(), duration_ms = EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, created_at))) * 1000"
+	case JobStatusFailed, JobStatusCancelled:
+		clearError = ""
 		extra = ", completed_at = NOW(), duration_ms = EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, created_at))) * 1000"
 	}
 	_, err := db.conn.ExecContext(ctx,
-		fmt.Sprintf("UPDATE jobs SET status = $1, updated_at = NOW()%s WHERE id = $2", extra),
+		fmt.Sprintf("UPDATE jobs SET status = $1, updated_at = NOW()%s%s WHERE id = $2", clearError, extra),
 		status, id,
 	)
 	return err
