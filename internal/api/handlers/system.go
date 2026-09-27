@@ -156,7 +156,7 @@ func (h *SystemHandler) UploadSource(c *gin.Context) {
 		Endpoint:        settings.S3Endpoint,
 	}
 	if err := storage.UploadObject(c.Request.Context(), creds, settings.ScannerBucket, key, src); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": uploadErrorMessage(settings.ScannerBucket, key, err)})
 		return
 	}
 
@@ -175,6 +175,15 @@ func (h *SystemHandler) UploadSource(c *gin.Context) {
 		"key":    key,
 		"job_id": job.ID,
 	})
+}
+
+func uploadErrorMessage(bucket, key string, err error) string {
+	message := err.Error()
+	target := fmt.Sprintf("s3://%s/%s", bucket, key)
+	if strings.Contains(message, "AccessDenied") || strings.Contains(message, "StatusCode: 403") {
+		return fmt.Sprintf("Wasabi denied upload to %s. Update the access key or bucket policy to allow s3:PutObject for this bucket/prefix, then try again.", target)
+	}
+	return fmt.Sprintf("Upload to %s failed: %s", target, message)
 }
 
 var unsafeUploadChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
