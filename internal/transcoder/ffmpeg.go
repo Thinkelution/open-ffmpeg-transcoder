@@ -305,6 +305,13 @@ func (f *FFmpeg) Thumbnail(ctx context.Context, input, output string, atSeconds 
 		}
 		return fmt.Errorf("ffmpeg thumbnail exited with error: %w", err)
 	}
+	stat, err := os.Stat(output)
+	if err != nil {
+		return fmt.Errorf("thumbnail was not created: %w", err)
+	}
+	if stat.Size() == 0 {
+		return fmt.Errorf("thumbnail was empty")
+	}
 	return nil
 }
 

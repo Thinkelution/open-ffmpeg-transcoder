@@ -139,10 +139,7 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 	}
 
 	if thumbnailPath != "" {
-		thumbnailAt := durationSec / 2
-		if thumbnailAt < 1 {
-			thumbnailAt = 1
-		}
+		thumbnailAt := thumbnailTimestamp(durationSec)
 		if err := h.ff.Thumbnail(h.ctx, inputPath, thumbnailPath, thumbnailAt); err != nil {
 			log.Printf("[handler] Job %s: thumbnail generation skipped: %v", jobID, err)
 		} else {
@@ -227,6 +224,20 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 
 	log.Printf("[handler] Job %s: completed successfully", jobID)
 	return nil
+}
+
+func thumbnailTimestamp(durationSec float64) float64 {
+	if durationSec <= 0 {
+		return 1
+	}
+	at := durationSec / 2
+	if durationSec > 0.2 && at >= durationSec-0.1 {
+		at = durationSec - 0.1
+	}
+	if at < 0 {
+		return 0
+	}
+	return at
 }
 
 func childStorageURL(baseURL, child string) string {
