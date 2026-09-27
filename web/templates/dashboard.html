@@ -96,8 +96,20 @@
                     <button @click="closePlayer()" class="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800">Close</button>
                 </div>
             </div>
-            <div class="bg-black">
+            <div class="bg-black relative">
                 <video id="dashboard-hls-player" class="w-full aspect-video bg-black" controls playsinline></video>
+                <div class="absolute left-4 right-4 bottom-4 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+                    <div class="rounded-full bg-black/65 px-3 py-1.5 text-xs text-gray-200 backdrop-blur" x-text="playerStatus"></div>
+                    <label class="pointer-events-auto flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-xs text-gray-200 backdrop-blur border border-white/10">
+                        <span>Quality</span>
+                        <select x-model="selectedQuality" @change="applyQuality()" class="bg-transparent text-white outline-none">
+                            <option value="-1">Auto</option>
+                            <template x-for="(level, index) in qualityLevels" :key="index">
+                                <option :value="String(index)" x-text="levelLabel(level, index)"></option>
+                            </template>
+                        </select>
+                    </label>
+                </div>
             </div>
             <p x-show="shareMessage" class="px-5 py-3 text-sm text-emerald-300 border-t border-gray-800" x-text="shareMessage"></p>
         </div>

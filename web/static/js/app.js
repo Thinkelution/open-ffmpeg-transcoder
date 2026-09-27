@@ -67,6 +67,9 @@ function dashboard() {
         uploadError: '',
         selectedVideo: null,
         hlsPlayer: null,
+        qualityLevels: [],
+        selectedQuality: '-1',
+        playerStatus: '',
         shareMessage: '',
         statuses: [
             { key: 'pending', label: 'Pending', color: 'text-gray-300' },
@@ -130,6 +133,21 @@ function dashboard() {
                 player.load();
             }
             this.selectedVideo = null;
+            this.qualityLevels = [];
+            this.selectedQuality = '-1';
+            this.playerStatus = '';
+        },
+
+        applyQuality() {
+            if (!this.hlsPlayer) return;
+            this.hlsPlayer.currentLevel = Number(this.selectedQuality);
+        },
+
+        levelLabel(level, index) {
+            if (!level) return `Level ${index + 1}`;
+            const height = level.height ? `${level.height}p` : `Level ${index + 1}`;
+            const bitrate = level.bitrate ? ` · ${Math.round(level.bitrate / 1000)} kbps` : '';
+            return height + bitrate;
         },
 
         attachPlayer(url) {
@@ -139,16 +157,35 @@ function dashboard() {
                 this.hlsPlayer.destroy();
                 this.hlsPlayer = null;
             }
-            if (player.canPlayType('application/vnd.apple.mpegurl')) {
+            this.qualityLevels = [];
+            this.selectedQuality = '-1';
+            this.playerStatus = 'Loading stream...';
+            if (player.canPlayType('application/vnd.apple.mpegurl') && !(window.Hls && window.Hls.isSupported())) {
                 player.src = url;
+                this.playerStatus = 'Native adaptive HLS playback';
                 player.play().catch(() => {});
                 return;
             }
             if (window.Hls && window.Hls.isSupported()) {
-                this.hlsPlayer = new window.Hls();
+                this.hlsPlayer = new window.Hls({ capLevelToPlayerSize: true });
                 this.hlsPlayer.loadSource(url);
                 this.hlsPlayer.attachMedia(player);
-                this.hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, () => player.play().catch(() => {}));
+                this.hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                    this.qualityLevels = this.hlsPlayer.levels || [];
+                    this.selectedQuality = String(this.hlsPlayer.currentLevel ?? -1);
+                    this.playerStatus = `${this.qualityLevels.length} variants available`;
+                    player.play().catch(() => {});
+                });
+                this.hlsPlayer.on(window.Hls.Events.LEVEL_SWITCHED, (_, data) => {
+                    if (this.selectedQuality === '-1') {
+                        this.playerStatus = `Auto · ${this.levelLabel(this.hlsPlayer.levels[data.level], data.level)}`;
+                    }
+                });
+                this.hlsPlayer.on(window.Hls.Events.ERROR, (_, data) => {
+                    this.playerStatus = data && data.details ? data.details : 'Playback error';
+                });
+            } else {
+                this.playerStatus = 'This browser cannot play HLS.';
             }
         },
 

@@ -234,12 +234,55 @@ func (h *MediaHandler) PublicPlayer(c *gin.Context) {
 <title>%s - 1transcoder</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <style>
-body{margin:0;background:#020617;color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,sans-serif;display:grid;min-height:100vh;place-items:center;padding:24px}.wrap{width:min(1100px,100%%)}video{width:100%%;aspect-ratio:16/9;background:#000;border-radius:18px;border:1px solid #1f2937}h1{font-size:20px;margin:16px 0 4px}.muted{color:#94a3b8;font-size:13px;margin:0}</style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top left,#172554 0,#020617 42%%,#020617 100%%);color:#e5e7eb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;padding:24px;display:grid;place-items:center}.wrap{width:min(1120px,100%%)}.brand{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.logo{font-weight:800;letter-spacing:-.04em;font-size:24px}.logo span{color:#34d399}.pill{border:1px solid rgba(52,211,153,.35);color:#a7f3d0;background:rgba(6,78,59,.35);border-radius:999px;padding:8px 12px;font-size:12px}.card{overflow:hidden;border:1px solid rgba(148,163,184,.22);border-radius:28px;background:rgba(15,23,42,.82);box-shadow:0 24px 90px rgba(0,0,0,.45);backdrop-filter:blur(18px)}.player-shell{position:relative;background:#000}.player-shell:before{content:"";display:block;aspect-ratio:16/9}video{position:absolute;inset:0;width:100%%;height:100%%;background:#000}.topbar{position:absolute;left:18px;right:18px;top:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none}.badge,.select-wrap{pointer-events:auto;border:1px solid rgba(255,255,255,.14);background:rgba(2,6,23,.68);box-shadow:0 12px 34px rgba(0,0,0,.35);backdrop-filter:blur(12px);border-radius:999px;padding:10px 13px;font-size:13px}.select-wrap{display:flex;gap:8px;align-items:center;color:#cbd5e1}select{background:transparent;color:white;border:0;outline:0;font:inherit}option{background:#0f172a;color:white}.meta{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:20px 22px 22px}.meta h1{font-size:20px;line-height:1.25;margin:0 0 6px}.muted{color:#94a3b8;font-size:13px;margin:0;word-break:break-all}.hint{color:#6ee7b7;font-size:13px;margin:0;white-space:nowrap}@media(max-width:720px){body{padding:14px}.brand,.meta{display:block}.pill,.hint{display:inline-block;margin-top:10px}.topbar{align-items:flex-start;flex-direction:column}.badge,.select-wrap{font-size:12px}}
+</style>
 </head>
-<body><main class="wrap"><video id="player" controls autoplay playsinline></video><h1>%s</h1><p class="muted">%s</p></main><script>
-const src=%q; const video=document.getElementById('player');
-if(video.canPlayType('application/vnd.apple.mpegurl')){video.src=src;} else if(window.Hls&&window.Hls.isSupported()){const hls=new Hls();hls.loadSource(src);hls.attachMedia(video);} else {document.body.insertAdjacentHTML('beforeend','<p>This browser cannot play HLS.</p>');}
-</script></body></html>`, name, name, caption, hlsURL)
+<body>
+<main class="wrap">
+  <div class="brand"><div class="logo"><span>1</span>transcoder</div><div class="pill">Adaptive HLS demo player</div></div>
+  <section class="card">
+    <div class="player-shell">
+      <video id="player" controls autoplay playsinline></video>
+      <div class="topbar">
+        <div class="badge" id="status">Loading stream...</div>
+        <label class="select-wrap"><span>Quality</span><select id="quality"><option value="-1">Auto</option></select></label>
+      </div>
+    </div>
+    <div class="meta"><div><h1>%s</h1><p class="muted">%s</p></div><p class="hint">Use quality to lock a rendition or leave Auto on.</p></div>
+  </section>
+</main>
+<script>
+const src=%q;
+const video=document.getElementById('player');
+const statusEl=document.getElementById('status');
+const quality=document.getElementById('quality');
+let hls=null;
+function label(level,index){const height=level&&level.height?level.height+'p':'Level '+(index+1);const rate=level&&level.bitrate?' · '+Math.round(level.bitrate/1000)+' kbps':'';return height+rate;}
+function setStatus(text){statusEl.textContent=text;}
+if(window.Hls&&window.Hls.isSupported()){
+  hls=new Hls({capLevelToPlayerSize:true});
+  hls.loadSource(src);
+  hls.attachMedia(video);
+  hls.on(Hls.Events.MANIFEST_PARSED,()=>{
+    quality.innerHTML='<option value="-1">Auto</option>';
+    hls.levels.forEach((level,index)=>{const option=document.createElement('option');option.value=String(index);option.textContent=label(level,index);quality.appendChild(option);});
+    setStatus(hls.levels.length+' variants available');
+    video.play().catch(()=>{});
+  });
+  hls.on(Hls.Events.LEVEL_SWITCHED,(_,data)=>{if(quality.value==='-1')setStatus('Auto · '+label(hls.levels[data.level],data.level));});
+  hls.on(Hls.Events.ERROR,(_,data)=>{setStatus(data&&data.details?data.details:'Playback error');});
+  quality.addEventListener('change',()=>{hls.currentLevel=Number(quality.value);setStatus(quality.value==='-1'?'Auto quality':('Locked · '+quality.options[quality.selectedIndex].textContent));});
+}else if(video.canPlayType('application/vnd.apple.mpegurl')){
+  video.src=src;
+  quality.disabled=true;
+  setStatus('Native adaptive HLS playback');
+  video.play().catch(()=>{});
+}else{
+  setStatus('This browser cannot play HLS.');
+}
+</script>
+</body>
+</html>`, name, name, caption, hlsURL)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(page))
 }
 
