@@ -42,7 +42,7 @@
         <div class="p-6">
             <div x-show="videos.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 <template x-for="video in videos" :key="video.job_id">
-                    <div class="rounded-xl border border-gray-800 bg-gray-950 overflow-hidden">
+                    <button type="button" @click="playVideo(video)" class="group text-left rounded-xl border border-gray-800 bg-gray-950 overflow-hidden transition hover:border-emerald-500/70 focus:outline-none focus:ring-2 focus:ring-emerald-500/70" :class="video.playable ? 'cursor-pointer' : 'cursor-default'">
                         <div class="relative aspect-video bg-gradient-to-br from-gray-800 via-gray-900 to-black flex items-center justify-center">
                             <template x-if="video.thumbnail_ready">
                                 <img class="absolute inset-0 h-full w-full object-cover" :src="'/api/v1/media/uploads/' + video.job_id + '/thumbnail'" :alt="video.name" @error="video.thumbnail_ready = false">
@@ -51,6 +51,9 @@
                                 <div class="mx-auto mb-3 h-12 w-12 rounded-full border border-gray-700 flex items-center justify-center text-2xl text-emerald-400">▶</div>
                                 <div class="text-sm font-medium text-gray-300">Thumbnail pending</div>
                                 <div class="text-xs text-gray-500 mt-1">Generated at video midpoint</div>
+                            </div>
+                            <div x-show="video.playable" class="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition flex items-center justify-center">
+                                <div class="opacity-0 group-hover:opacity-100 transition rounded-full bg-emerald-500 text-gray-950 h-14 w-14 flex items-center justify-center text-2xl shadow-lg">▶</div>
                             </div>
                             <div x-show="video.status !== 'completed'" class="absolute inset-0 bg-gray-950/70 backdrop-blur-[1px] flex items-center justify-center">
                                 <div class="rounded-full bg-gray-900/90 border border-gray-700 px-3 py-1 text-xs font-semibold text-gray-200">
@@ -70,11 +73,28 @@
                             </div>
                             <div class="text-xs text-gray-500 truncate" :title="video.output_prefix" x-text="video.output_bucket ? video.output_bucket + '/' + video.output_prefix : 'Output pending'"></div>
                         </div>
-                    </div>
+                    </button>
                 </template>
             </div>
             <div x-show="videos.length === 0" class="rounded-lg border border-dashed border-gray-800 p-8 text-center text-gray-500">
                 Uploaded videos will appear here with a thumbnail and processing overlay.
+            </div>
+        </div>
+    </div>
+
+
+    <!-- HLS player modal -->
+    <div x-show="selectedVideo" x-transition.opacity class="fixed inset-0 z-50 bg-black/80 p-4 flex items-center justify-center" @keydown.escape.window="closePlayer()" style="display: none;">
+        <div class="w-full max-w-5xl rounded-2xl border border-gray-800 bg-gray-950 shadow-2xl overflow-hidden">
+            <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-gray-800">
+                <div class="min-w-0">
+                    <h2 class="font-semibold truncate" x-text="selectedVideo ? selectedVideo.name : ''"></h2>
+                    <p class="text-xs text-gray-500 truncate" x-text="selectedVideo ? selectedVideo.output_bucket + '/' + selectedVideo.output_prefix : ''"></p>
+                </div>
+                <button @click="closePlayer()" class="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800">Close</button>
+            </div>
+            <div class="bg-black">
+                <video id="dashboard-hls-player" class="w-full aspect-video bg-black" controls playsinline></video>
             </div>
         </div>
     </div>

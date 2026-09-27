@@ -75,6 +75,7 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	v1.POST("/media/probe", mediaH.Probe)
 	v1.GET("/media/uploads", mediaH.Uploads)
 	v1.GET("/media/uploads/:id/thumbnail", mediaH.Thumbnail)
+	v1.GET("/media/uploads/:id/hls/*asset", mediaH.HLS)
 
 	return r
 }

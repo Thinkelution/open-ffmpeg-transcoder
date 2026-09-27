@@ -65,6 +65,8 @@ function dashboard() {
         uploadFile: null,
         uploadResult: '',
         uploadError: '',
+        selectedVideo: null,
+        hlsPlayer: null,
         statuses: [
             { key: 'pending', label: 'Pending', color: 'text-gray-300' },
             { key: 'downloading', label: 'Downloading', color: 'text-blue-400' },
@@ -96,6 +98,46 @@ function dashboard() {
                 this.uploadError = e.message || 'Upload failed';
             }
             this.uploading = false;
+        },
+
+        playVideo(video) {
+            if (!video.playable) return;
+            this.selectedVideo = video;
+            this.$nextTick(() => this.attachPlayer(video.playback_url));
+        },
+
+        closePlayer() {
+            if (this.hlsPlayer) {
+                this.hlsPlayer.destroy();
+                this.hlsPlayer = null;
+            }
+            const player = document.getElementById('dashboard-hls-player');
+            if (player) {
+                player.pause();
+                player.removeAttribute('src');
+                player.load();
+            }
+            this.selectedVideo = null;
+        },
+
+        attachPlayer(url) {
+            const player = document.getElementById('dashboard-hls-player');
+            if (!player || !url) return;
+            if (this.hlsPlayer) {
+                this.hlsPlayer.destroy();
+                this.hlsPlayer = null;
+            }
+            if (player.canPlayType('application/vnd.apple.mpegurl')) {
+                player.src = url;
+                player.play().catch(() => {});
+                return;
+            }
+            if (window.Hls && window.Hls.isSupported()) {
+                this.hlsPlayer = new window.Hls();
+                this.hlsPlayer.loadSource(url);
+                this.hlsPlayer.attachMedia(player);
+                this.hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, () => player.play().catch(() => {}));
+            }
         },
 
         async refresh() {

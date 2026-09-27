@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path"
@@ -114,8 +115,10 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 		}
 
 		thumbnailReady := hasThumbnail(outputInfo)
+		playable := false
 		if job.Status == database.JobStatusCompleted && outputCfg.Type == "s3" && outputPrefix != "" {
 			thumbnailReady = true
+			playable = true
 		}
 
 		items = append(items, gin.H{
@@ -130,7 +133,9 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			"output_bucket":   outputBucket,
 			"output_prefix":   outputPrefix,
 			"master_playlist": childStorageURL(outputCfg.URL, "master.m3u8"),
+			"playback_url":    fmt.Sprintf("/api/v1/media/uploads/%s/hls/master.m3u8", job.ID),
 			"thumbnail_ready": thumbnailReady,
+			"playable":        playable,
 		})
 	}
 
@@ -161,16 +166,61 @@ func (h *MediaHandler) Thumbnail(c *gin.Context) {
 
 	thumbCfg := outputCfg
 	thumbCfg.URL = childStorageURL(outputCfg.URL, "thumbnail.jpg")
-	downloader, err := storage.NewDownloader(thumbCfg, h.cfg)
+	h.streamStorageObject(c, thumbCfg, "image/jpeg", false)
+}
+
+func (h *MediaHandler) HLS(c *gin.Context) {
+	jobID := c.Param("id")
+	assetPath := strings.TrimPrefix(c.Param("asset"), "/")
+	if assetPath == "" {
+		assetPath = "master.m3u8"
+	}
+	if !safeHLSAssetPath(assetPath) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid HLS asset path"})
+		return
+	}
+
+	job, err := h.db.GetJob(c.Request.Context(), jobID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+
+	var outputCfg database.StorageConfig
+	if err := json.Unmarshal(job.OutputConfig, &outputCfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "job output config is invalid"})
+		return
+	}
+	if outputCfg.Type != "s3" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "HLS output is not stored in S3"})
+		return
+	}
+
+	assetCfg := outputCfg
+	assetCfg.URL = childStorageURL(outputCfg.URL, assetPath)
+	contentType := contentTypeForHLSAsset(assetPath)
+	if strings.HasSuffix(strings.ToLower(assetPath), ".m3u8") {
+		h.streamStorageObject(c, assetCfg, contentType, true)
+		return
+	}
+	h.streamStorageObject(c, assetCfg, contentType, false)
+}
+
+func (h *MediaHandler) streamStorageObject(c *gin.Context, cfg database.StorageConfig, contentType string, rewritePlaylist bool) {
+	downloader, err := storage.NewDownloader(cfg, h.cfg)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	tmpFile := filepath.Join(h.cfg.TempDir, "thumb-"+jobID+".jpg")
+	tmpFile := filepath.Join(h.cfg.TempDir, "media-"+uuid.New().String()+filepath.Ext(cfg.URL))
 	defer os.Remove(tmpFile)
 	if err := downloader.Download(c.Request.Context(), tmpFile); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not available"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "media asset not available"})
 		return
 	}
 
@@ -179,7 +229,45 @@ func (h *MediaHandler) Thumbnail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.Data(http.StatusOK, "image/jpeg", data)
+	if rewritePlaylist {
+		data = []byte(rewriteHLSPlaylist(string(data), c.Request.URL.Path))
+	}
+	c.Header("Cache-Control", "private, max-age=30")
+	c.Data(http.StatusOK, contentType, data)
+}
+
+func rewriteHLSPlaylist(body, requestPath string) string {
+	basePath := path.Dir(requestPath)
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") || strings.HasPrefix(trimmed, "/") {
+			continue
+		}
+		lines[i] = path.Join(basePath, trimmed)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func safeHLSAssetPath(assetPath string) bool {
+	if strings.Contains(assetPath, "\\") || strings.HasPrefix(assetPath, "/") {
+		return false
+	}
+	clean := path.Clean(assetPath)
+	return clean == assetPath && clean != "." && !strings.HasPrefix(clean, "../") && clean != ".."
+}
+
+func contentTypeForHLSAsset(assetPath string) string {
+	switch strings.ToLower(path.Ext(assetPath)) {
+	case ".m3u8":
+		return "application/vnd.apple.mpegurl"
+	case ".ts":
+		return "video/mp2t"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 func hasThumbnail(outputInfo map[string]interface{}) bool {
