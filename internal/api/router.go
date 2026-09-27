@@ -27,6 +27,15 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	// Serve embedded static files
 	staticFS, _ := fs.Sub(web.StaticFS, "static")
 	r.StaticFS("/static", http.FS(staticFS))
+	r.GET("/favicon.ico", func(c *gin.Context) {
+		data, err := web.StaticFS.ReadFile("static/img/favicon.svg")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Data(http.StatusOK, "image/svg+xml; charset=utf-8", data)
+	})
 
 	auth := middleware.NewSessionAuth(cfg)
 
