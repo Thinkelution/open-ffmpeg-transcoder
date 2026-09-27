@@ -30,6 +30,10 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 
 	auth := middleware.NewSessionAuth(cfg)
 
+	mediaH := handlers.NewMediaHandler(cfg, db)
+	r.GET("/play/:id", mediaH.PublicPlayer)
+	r.GET("/play/:id/hls/*asset", mediaH.PublicHLS)
+
 	// Dashboard routes
 	dash := handlers.NewDashboardHandler(cfg, db, auth)
 	r.GET("/login", dash.LoginPage)
@@ -71,11 +75,11 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	v1.PUT("/settings", sysH.UpdateSettings)
 	v1.POST("/upload", sysH.UploadSource)
 
-	mediaH := handlers.NewMediaHandler(cfg, db)
 	v1.POST("/media/probe", mediaH.Probe)
 	v1.GET("/media/uploads", mediaH.Uploads)
 	v1.GET("/media/uploads/:id/thumbnail", mediaH.Thumbnail)
 	v1.GET("/media/uploads/:id/hls/*asset", mediaH.HLS)
+	v1.GET("/media/uploads/:id/share", mediaH.Share)
 
 	return r
 }

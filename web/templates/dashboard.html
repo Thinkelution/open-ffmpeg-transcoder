@@ -91,11 +91,15 @@
                     <h2 class="font-semibold truncate" x-text="selectedVideo ? selectedVideo.name : ''"></h2>
                     <p class="text-xs text-gray-500 truncate" x-text="selectedVideo ? selectedVideo.output_bucket + '/' + selectedVideo.output_prefix : ''"></p>
                 </div>
-                <button @click="closePlayer()" class="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800">Close</button>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button @click="copyShareLink(selectedVideo)" class="rounded-lg border border-emerald-800/70 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-950/40">Copy signed link</button>
+                    <button @click="closePlayer()" class="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800">Close</button>
+                </div>
             </div>
             <div class="bg-black">
                 <video id="dashboard-hls-player" class="w-full aspect-video bg-black" controls playsinline></video>
             </div>
+            <p x-show="shareMessage" class="px-5 py-3 text-sm text-emerald-300 border-t border-gray-800" x-text="shareMessage"></p>
         </div>
     </div>
 

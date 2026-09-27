@@ -67,6 +67,7 @@ function dashboard() {
         uploadError: '',
         selectedVideo: null,
         hlsPlayer: null,
+        shareMessage: '',
         statuses: [
             { key: 'pending', label: 'Pending', color: 'text-gray-300' },
             { key: 'downloading', label: 'Downloading', color: 'text-blue-400' },
@@ -104,6 +105,17 @@ function dashboard() {
             if (!video.playable) return;
             this.selectedVideo = video;
             this.$nextTick(() => this.attachPlayer(video.playback_url));
+        },
+
+        async copyShareLink(video) {
+            if (!video || !video.share_url) return;
+            try {
+                await navigator.clipboard.writeText(video.share_url);
+                this.shareMessage = 'Signed playback link copied';
+                setTimeout(() => { this.shareMessage = ''; }, 2500);
+            } catch (e) {
+                this.shareMessage = video.share_url;
+            }
         },
 
         closePlayer() {

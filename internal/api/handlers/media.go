@@ -1,14 +1,19 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -121,6 +126,11 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			playable = true
 		}
 
+		shareURL := ""
+		if playable {
+			shareURL = h.publicPlayerURL(c, job.ID, time.Now().Add(24*time.Hour))
+		}
+
 		items = append(items, gin.H{
 			"job_id":          job.ID,
 			"name":            name,
@@ -134,6 +144,7 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			"output_prefix":   outputPrefix,
 			"master_playlist": childStorageURL(outputCfg.URL, "master.m3u8"),
 			"playback_url":    fmt.Sprintf("/api/v1/media/uploads/%s/hls/master.m3u8", job.ID),
+			"share_url":       shareURL,
 			"thumbnail_ready": thumbnailReady,
 			"playable":        playable,
 		})
@@ -167,6 +178,110 @@ func (h *MediaHandler) Thumbnail(c *gin.Context) {
 	thumbCfg := outputCfg
 	thumbCfg.URL = childStorageURL(outputCfg.URL, "thumbnail.jpg")
 	h.streamStorageObject(c, thumbCfg, "image/jpeg", false)
+}
+
+func (h *MediaHandler) Share(c *gin.Context) {
+	jobID := c.Param("id")
+	job, err := h.db.GetJob(c.Request.Context(), jobID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+	if job.Status != database.JobStatusCompleted {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "job is not completed yet"})
+		return
+	}
+	expires := time.Now().Add(24 * time.Hour)
+	c.JSON(http.StatusOK, gin.H{
+		"expires_at": expires.UTC().Format(time.RFC3339),
+		"player_url": h.publicPlayerURL(c, jobID, expires),
+		"hls_url":    h.publicHLSURL(c, jobID, "master.m3u8", expires),
+	})
+}
+
+func (h *MediaHandler) PublicPlayer(c *gin.Context) {
+	jobID := c.Param("id")
+	expires, ok := h.validatePlaybackSignature(c, jobID)
+	if !ok {
+		c.String(http.StatusForbidden, "Playback link is invalid or expired")
+		return
+	}
+	job, err := h.db.GetJob(c.Request.Context(), jobID)
+	if err != nil || job == nil {
+		c.String(http.StatusNotFound, "Video not found")
+		return
+	}
+	var outputCfg database.StorageConfig
+	json.Unmarshal(job.OutputConfig, &outputCfg)
+	_, outputPrefix := parseS3URL(outputCfg.URL)
+	name := html.EscapeString(job.ID)
+	metadata := map[string]string{}
+	json.Unmarshal(job.Metadata, &metadata)
+	if source := path.Base(metadata["scanner_source_key"]); source != "." && source != "/" && source != "" {
+		name = html.EscapeString(source)
+	}
+	hlsURL := html.EscapeString(h.publicHLSPath(jobID, "master.m3u8", expires))
+	caption := html.EscapeString(outputPrefix)
+	page := fmt.Sprintf(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>%s - 1transcoder</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+<style>
+body{margin:0;background:#020617;color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,sans-serif;display:grid;min-height:100vh;place-items:center;padding:24px}.wrap{width:min(1100px,100%%)}video{width:100%%;aspect-ratio:16/9;background:#000;border-radius:18px;border:1px solid #1f2937}h1{font-size:20px;margin:16px 0 4px}.muted{color:#94a3b8;font-size:13px;margin:0}</style>
+</head>
+<body><main class="wrap"><video id="player" controls autoplay playsinline></video><h1>%s</h1><p class="muted">%s</p></main><script>
+const src=%q; const video=document.getElementById('player');
+if(video.canPlayType('application/vnd.apple.mpegurl')){video.src=src;} else if(window.Hls&&window.Hls.isSupported()){const hls=new Hls();hls.loadSource(src);hls.attachMedia(video);} else {document.body.insertAdjacentHTML('beforeend','<p>This browser cannot play HLS.</p>');}
+</script></body></html>`, name, name, caption, hlsURL)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(page))
+}
+
+func (h *MediaHandler) PublicHLS(c *gin.Context) {
+	jobID := c.Param("id")
+	expires, ok := h.validatePlaybackSignature(c, jobID)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "playback link is invalid or expired"})
+		return
+	}
+	assetPath := strings.TrimPrefix(c.Param("asset"), "/")
+	if assetPath == "" {
+		assetPath = "master.m3u8"
+	}
+	if !safeHLSAssetPath(assetPath) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid HLS asset path"})
+		return
+	}
+	job, err := h.db.GetJob(c.Request.Context(), jobID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+	var outputCfg database.StorageConfig
+	if err := json.Unmarshal(job.OutputConfig, &outputCfg); err != nil || outputCfg.Type != "s3" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "HLS output is not available"})
+		return
+	}
+	assetCfg := outputCfg
+	assetCfg.URL = childStorageURL(outputCfg.URL, assetPath)
+	contentType := contentTypeForHLSAsset(assetPath)
+	if strings.HasSuffix(strings.ToLower(assetPath), ".m3u8") {
+		h.streamStorageObjectWithRewriter(c, assetCfg, contentType, func(body string) string {
+			return h.rewritePublicHLSPlaylist(body, jobID, assetPath, expires)
+		})
+		return
+	}
+	h.streamStorageObject(c, assetCfg, contentType, false)
 }
 
 func (h *MediaHandler) HLS(c *gin.Context) {
@@ -236,6 +351,30 @@ func (h *MediaHandler) streamStorageObject(c *gin.Context, cfg database.StorageC
 	c.Data(http.StatusOK, contentType, data)
 }
 
+func (h *MediaHandler) streamStorageObjectWithRewriter(c *gin.Context, cfg database.StorageConfig, contentType string, rewrite func(string) string) {
+	downloader, err := storage.NewDownloader(cfg, h.cfg)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	tmpFile := filepath.Join(h.cfg.TempDir, "media-"+uuid.New().String()+filepath.Ext(cfg.URL))
+	defer os.Remove(tmpFile)
+	if err := downloader.Download(c.Request.Context(), tmpFile); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "media asset not available"})
+		return
+	}
+	data, err := os.ReadFile(tmpFile)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if rewrite != nil {
+		data = []byte(rewrite(string(data)))
+	}
+	c.Header("Cache-Control", "private, max-age=30")
+	c.Data(http.StatusOK, contentType, data)
+}
+
 func rewriteHLSPlaylist(body, requestPath string) string {
 	basePath := path.Dir(requestPath)
 	lines := strings.Split(body, "\n")
@@ -268,6 +407,91 @@ func contentTypeForHLSAsset(assetPath string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func (h *MediaHandler) rewritePublicHLSPlaylist(body, jobID, assetPath string, expires time.Time) string {
+	baseAsset := path.Dir(assetPath)
+	if baseAsset == "." {
+		baseAsset = ""
+	}
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") || strings.HasPrefix(trimmed, "/") {
+			continue
+		}
+		lines[i] = h.publicHLSPath(jobID, path.Join(baseAsset, trimmed), expires)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (h *MediaHandler) publicPlayerURL(c *gin.Context, jobID string, expires time.Time) string {
+	return h.externalBaseURL(c) + h.publicPlayerPath(jobID, expires)
+}
+
+func (h *MediaHandler) publicHLSURL(c *gin.Context, jobID, asset string, expires time.Time) string {
+	return h.externalBaseURL(c) + h.publicHLSPath(jobID, asset, expires)
+}
+
+func (h *MediaHandler) publicPlayerPath(jobID string, expires time.Time) string {
+	exp := expires.Unix()
+	return fmt.Sprintf("/play/%s?exp=%d&sig=%s", jobID, exp, h.playbackSignature(jobID, exp))
+}
+
+func (h *MediaHandler) publicHLSPath(jobID, asset string, expires time.Time) string {
+	exp := expires.Unix()
+	return fmt.Sprintf("/play/%s/hls/%s?exp=%d&sig=%s", jobID, strings.Trim(asset, "/"), exp, h.playbackSignature(jobID, exp))
+}
+
+func (h *MediaHandler) externalBaseURL(c *gin.Context) string {
+	scheme := c.GetHeader("X-Forwarded-Proto")
+	if scheme == "" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := c.GetHeader("X-Forwarded-Host")
+	if host == "" {
+		host = c.Request.Host
+	}
+	return scheme + "://" + host
+}
+
+func (h *MediaHandler) validatePlaybackSignature(c *gin.Context, jobID string) (time.Time, bool) {
+	expRaw := c.Query("exp")
+	sig := c.Query("sig")
+	expUnix, err := strconv.ParseInt(expRaw, 10, 64)
+	if err != nil || sig == "" {
+		return time.Time{}, false
+	}
+	if time.Now().Unix() > expUnix {
+		return time.Unix(expUnix, 0), false
+	}
+	expected := h.playbackSignature(jobID, expUnix)
+	if hmac.Equal([]byte(sig), []byte(expected)) {
+		return time.Unix(expUnix, 0), true
+	}
+	return time.Unix(expUnix, 0), false
+}
+
+func (h *MediaHandler) playbackSignature(jobID string, exp int64) string {
+	mac := hmac.New(sha256.New, []byte(h.playbackSecret()))
+	mac.Write([]byte(jobID))
+	mac.Write([]byte("."))
+	mac.Write([]byte(strconv.FormatInt(exp, 10)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (h *MediaHandler) playbackSecret() string {
+	if h.cfg.SessionSecret != "" {
+		return h.cfg.SessionSecret
+	}
+	if h.cfg.APIKey != "" {
+		return h.cfg.APIKey
+	}
+	return "open-ffmpeg-transcoder-dev-playback"
 }
 
 func hasThumbnail(outputInfo map[string]interface{}) bool {
