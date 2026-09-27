@@ -60,6 +60,7 @@ function dashboard() {
     return {
         counts: {},
         jobs: [],
+        videos: [],
         statuses: [
             { key: 'pending', label: 'Pending', color: 'text-gray-300' },
             { key: 'downloading', label: 'Downloading', color: 'text-blue-400' },
@@ -73,12 +74,14 @@ function dashboard() {
 
         async refresh() {
             try {
-                const [health, jobsResp] = await Promise.all([
+                const [health, jobsResp, uploadsResp] = await Promise.all([
                     apiGet('/api/v1/system/health'),
                     apiGet('/api/v1/jobs?limit=10'),
+                    apiGet('/api/v1/media/uploads?limit=24'),
                 ]);
                 this.counts = health.jobs || {};
                 this.jobs = jobsResp.jobs || [];
+                this.videos = uploadsResp.uploads || [];
             } catch (e) {
                 console.error('Dashboard refresh error:', e);
             }

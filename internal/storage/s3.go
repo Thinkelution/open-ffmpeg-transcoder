@@ -155,11 +155,15 @@ func (s *S3Storage) Upload(ctx context.Context, localPath string) error {
 	}
 	defer file.Close()
 
-	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+	input := &s3.PutObjectInput{
 		Bucket: &bucket,
 		Key:    &key,
 		Body:   file,
-	})
+	}
+	if contentType := contentTypeForKey(key); contentType != nil {
+		input.ContentType = contentType
+	}
+	_, err = client.PutObject(ctx, input)
 	if err != nil {
 		return fmt.Errorf("S3 PutObject: %w", err)
 	}
@@ -211,6 +215,10 @@ func contentTypeForKey(key string) *string {
 		contentType = "video/mp2t"
 	case ".mp4":
 		contentType = "video/mp4"
+	case ".jpg", ".jpeg":
+		contentType = "image/jpeg"
+	case ".png":
+		contentType = "image/png"
 	}
 	if contentType == "" {
 		return nil

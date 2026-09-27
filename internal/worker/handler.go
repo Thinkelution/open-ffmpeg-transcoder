@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -108,6 +110,8 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 		outputExt = ".mp4"
 	}
 	outputPath := filepath.Join(jobDir, "output"+outputExt)
+	thumbnailPath := ""
+	thumbnailURL := ""
 	if settings.Format == "hls" {
 		outputDir := filepath.Join(jobDir, "output")
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -129,6 +133,31 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 			}
 		} else {
 			settings.ExtraFlags = ensureHLSSegmentFilename(settings.ExtraFlags, filepath.Join(outputDir, "segment_%05d.ts"))
+		}
+		thumbnailPath = filepath.Join(outputDir, "thumbnail.jpg")
+		thumbnailURL = childStorageURL(outputCfg.URL, "thumbnail.jpg")
+	}
+
+	if thumbnailPath != "" {
+		thumbnailAt := durationSec / 2
+		if thumbnailAt < 1 {
+			thumbnailAt = 1
+		}
+		if err := h.ff.Thumbnail(h.ctx, inputPath, thumbnailPath, thumbnailAt); err != nil {
+			log.Printf("[handler] Job %s: thumbnail generation skipped: %v", jobID, err)
+		} else {
+			h.updateThumbnailInfo(jobID, thumbnailURL)
+			if outputCfg.Type == "s3" && thumbnailURL != "" {
+				thumbCfg := outputCfg
+				thumbCfg.URL = thumbnailURL
+				if uploader, err := storage.NewUploader(thumbCfg, h.cfg); err != nil {
+					log.Printf("[handler] Job %s: create thumbnail uploader failed: %v", jobID, err)
+				} else if err := uploader.Upload(h.ctx, thumbnailPath); err != nil {
+					log.Printf("[handler] Job %s: early thumbnail upload failed: %v", jobID, err)
+				} else {
+					log.Printf("[handler] Job %s: thumbnail uploaded to %s", jobID, thumbnailURL)
+				}
+			}
 		}
 	}
 
@@ -152,6 +181,15 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 		outputInfo := map[string]interface{}{
 			"size_bytes": stat.Size(),
 			"probe":      outProbe,
+		}
+		if thumbnailPath != "" {
+			if thumbStat, err := os.Stat(thumbnailPath); err == nil {
+				outputInfo["thumbnail"] = map[string]interface{}{
+					"url":        thumbnailURL,
+					"name":       filepath.Base(thumbnailPath),
+					"size_bytes": thumbStat.Size(),
+				}
+			}
 		}
 		outJSON, _ := json.Marshal(outputInfo)
 		h.db.UpdateJobOutputInfo(h.ctx, jobID, outJSON)
@@ -189,6 +227,36 @@ func (h *Handler) HandleTranscode(_ context.Context, task *asynq.Task) error {
 
 	log.Printf("[handler] Job %s: completed successfully", jobID)
 	return nil
+}
+
+func childStorageURL(baseURL, child string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	child = strings.Trim(child, "/")
+	if baseURL == "" || child == "" {
+		return ""
+	}
+	if strings.HasPrefix(baseURL, "s3://") {
+		trimmed := strings.TrimSuffix(strings.TrimPrefix(baseURL, "s3://"), "/")
+		return "s3://" + path.Join(trimmed, child)
+	}
+	return strings.TrimRight(baseURL, "/") + "/" + child
+}
+
+func (h *Handler) updateThumbnailInfo(jobID, thumbnailURL string) {
+	if thumbnailURL == "" {
+		return
+	}
+	outputInfo := map[string]interface{}{
+		"thumbnail": map[string]interface{}{
+			"url":          thumbnailURL,
+			"name":         "thumbnail.jpg",
+			"generated_at": time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+	outJSON, _ := json.Marshal(outputInfo)
+	if err := h.db.UpdateJobOutputInfo(h.ctx, jobID, outJSON); err != nil {
+		log.Printf("[handler] Job %s: update thumbnail metadata failed: %v", jobID, err)
+	}
 }
 
 func ensureHLSSegmentFilename(flags []string, pattern string) []string {

@@ -279,6 +279,35 @@ func (f *FFmpeg) Run(ctx context.Context, input, output string, settings databas
 	return nil
 }
 
+// Thumbnail captures a representative JPEG frame from the input at the requested timestamp.
+func (f *FFmpeg) Thumbnail(ctx context.Context, input, output string, atSeconds float64) error {
+	if atSeconds <= 0 {
+		atSeconds = 1
+	}
+	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+		return fmt.Errorf("create thumbnail dir: %w", err)
+	}
+	args := []string{
+		"-y",
+		"-ss", fmt.Sprintf("%.3f", atSeconds),
+		"-i", input,
+		"-frames:v", "1",
+		"-q:v", "2",
+		"-vf", "scale='min(640,iw)':-2",
+		output,
+	}
+	log.Printf("[ffmpeg] Capturing thumbnail: %s %s", f.BinaryPath, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, f.BinaryPath, args...)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("thumbnail capture cancelled")
+		}
+		return fmt.Errorf("ffmpeg thumbnail exited with error: %w", err)
+	}
+	return nil
+}
+
 // CheckNVIDIA returns true if nvidia GPU encoding is available.
 func (f *FFmpeg) CheckNVIDIA() bool {
 	if !hasNVIDIADevice() {
