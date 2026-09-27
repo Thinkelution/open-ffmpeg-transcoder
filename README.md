@@ -157,7 +157,7 @@ All settings are configured via environment variables. See [.env.example](.env.e
 
 ### Wasabi/S3 HLS Scanner
 
-Set `SCANNER_ENABLED=true` to watch a Wasabi or S3 bucket for new source videos. The scanner lists `SCANNER_BUCKET` under `SCANNER_INPUT_PREFIX`, skips anything already queued or completed, creates a normal transcode job, and uploads the HLS output to:
+Set `SCANNER_ENABLED=true` to watch a Wasabi or S3 bucket for new source videos. The scanner lists `SCANNER_BUCKET` under `SCANNER_INPUT_PREFIX`, skips anything already queued or completed, creates a normal transcode job, and uploads the HLS output to `SCANNER_OUTPUT_BUCKET` when set, otherwise back to `SCANNER_BUCKET`.
 
 ```text
 s3://<bucket>/<SCANNER_OUTPUT_PREFIX>/<source-name>-<source-key-hash>/index.m3u8
@@ -166,17 +166,18 @@ s3://<bucket>/<SCANNER_OUTPUT_PREFIX>/<source-name>-<source-key-hash>/index.m3u8
 For Wasabi, use your bucket's region and endpoint, for example:
 
 ```bash
-S3_REGION=ap-southeast-1
-S3_ENDPOINT=https://s3.ap-southeast-1.wasabisys.com
+S3_REGION=us-central-1
+S3_ENDPOINT=https://s3.us-central-1.wasabisys.com
 SCANNER_ENABLED=true
-SCANNER_BUCKET=your-bucket
+SCANNER_BUCKET=master-uploader
+SCANNER_OUTPUT_BUCKET=master-video-library
 SCANNER_INPUT_PREFIX=incoming
 SCANNER_OUTPUT_PREFIX=hls
 ```
 
-Scanner HLS defaults can be tuned with `HLS_VIDEO_CODEC`, `HLS_FRAMERATE`, `HLS_AUDIO_CODEC`, `HLS_AUDIO_BITRATE`, `HLS_SEGMENT_SECONDS`, and `HLS_LADDER`.
+Scanner HLS defaults can be tuned with `HLS_VIDEO_CODEC`, `HLS_FRAMERATE_VALUE`, `HLS_GOP_FRAMES`, `HLS_AUDIO_CODEC`, `HLS_AUDIO_BITRATE`, `HLS_SEGMENT_SECONDS`, and `HLS_LADDER`.
 
-`HLS_LADDER` is a JSON array of renditions. The default ladder is 1080p, 720p, and 480p. Scanner jobs write `master.m3u8` plus one folder per rendition, for example `720p/index.m3u8` with its segments.
+`HLS_LADDER` is a JSON array of renditions. The default ladder follows the Amagi-style profile: 1080p @ 4100k, 720p @ 2200k, 480p @ 1000k, 360p @ 550k, and 240p @ 300k, with 29.97 fps and a 2-second GOP. Scanner jobs write `master.m3u8` plus one folder per rendition, for example `720p/index.m3u8` with its segments.
 
 These values can also be changed in the dashboard under **Settings** after signing in. The Wasabi secret is write-only from the browser: leave it blank to keep the current value.
 

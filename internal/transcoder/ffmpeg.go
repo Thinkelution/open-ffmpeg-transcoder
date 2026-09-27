@@ -141,6 +141,20 @@ func (f *FFmpeg) BuildHLSLadderArgs(input, output string, settings database.Tran
 	if segmentSeconds <= 0 {
 		segmentSeconds = 6
 	}
+	frameRate := hls.FramerateValue
+	if frameRate == "" && hls.Framerate > 0 {
+		frameRate = strconv.Itoa(hls.Framerate)
+	}
+	if frameRate == "" && settings.Video.Framerate > 0 {
+		frameRate = strconv.Itoa(settings.Video.Framerate)
+	}
+	if frameRate == "" {
+		frameRate = "30000/1001"
+	}
+	gopFrames := hls.GOPFrames
+	if gopFrames <= 0 {
+		gopFrames = 60
+	}
 
 	args := []string{"-y", "-i", input}
 	var filterParts []string
@@ -191,19 +205,26 @@ func (f *FFmpeg) BuildHLSLadderArgs(input, output string, settings database.Tran
 			"-map", "0:a:0?",
 			fmt.Sprintf("-c:v:%d", i), videoCodec,
 			fmt.Sprintf("-b:v:%d", i), videoBitrate,
+			fmt.Sprintf("-minrate:v:%d", i), videoBitrate,
 			fmt.Sprintf("-maxrate:v:%d", i), videoBitrate,
 			fmt.Sprintf("-bufsize:v:%d", i), doubleBitrate(videoBitrate),
+			fmt.Sprintf("-g:v:%d", i), strconv.Itoa(gopFrames),
+			fmt.Sprintf("-keyint_min:v:%d", i), strconv.Itoa(gopFrames),
+			fmt.Sprintf("-sc_threshold:v:%d", i), "0",
 			fmt.Sprintf("-c:a:%d", i), audioCodec,
 			fmt.Sprintf("-b:a:%d", i), audioBitrate,
 			fmt.Sprintf("-ac:a:%d", i), "2",
+			fmt.Sprintf("-ar:a:%d", i), "48000",
 		)
-		if hls.Framerate > 0 {
-			args = append(args, fmt.Sprintf("-r:v:%d", i), strconv.Itoa(hls.Framerate))
-		} else if settings.Video.Framerate > 0 {
-			args = append(args, fmt.Sprintf("-r:v:%d", i), strconv.Itoa(settings.Video.Framerate))
+		if frameRate != "" {
+			args = append(args, fmt.Sprintf("-r:v:%d", i), frameRate)
 		}
-		if settings.Video.Profile != "" {
-			args = append(args, fmt.Sprintf("-profile:v:%d", i), settings.Video.Profile)
+		profile := strings.TrimSpace(rendition.VideoProfile)
+		if profile == "" {
+			profile = settings.Video.Profile
+		}
+		if profile != "" {
+			args = append(args, fmt.Sprintf("-profile:v:%d", i), profile)
 		}
 		if settings.Video.PixelFormat != "" {
 			args = append(args, fmt.Sprintf("-pix_fmt:v:%d", i), settings.Video.PixelFormat)

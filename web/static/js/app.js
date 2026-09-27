@@ -181,31 +181,39 @@ function systemPage() {
 function settingsPage() {
     return {
         saving: false,
+        uploading: false,
         message: '',
         messageType: 'success',
+        uploadFile: null,
+        uploadResult: '',
         ladder: [
-            { name: '1080p', width: 1920, height: 1080, video_bitrate: '5000k', audio_bitrate: '128k' },
-            { name: '720p', width: 1280, height: 720, video_bitrate: '2800k', audio_bitrate: '128k' },
-            { name: '480p', width: 854, height: 480, video_bitrate: '1400k', audio_bitrate: '128k' },
+            { name: '1080p', width: 1920, height: 1080, video_bitrate: '4100k', audio_bitrate: '128k', video_profile: 'high' },
+            { name: '720p', width: 1280, height: 720, video_bitrate: '2200k', audio_bitrate: '128k', video_profile: 'high' },
+            { name: '480p', width: 848, height: 480, video_bitrate: '1000k', audio_bitrate: '96k', video_profile: 'high' },
+            { name: '360p', width: 640, height: 360, video_bitrate: '550k', audio_bitrate: '64k', video_profile: 'main' },
+            { name: '240p', width: 426, height: 240, video_bitrate: '300k', audio_bitrate: '64k', video_profile: 'main' },
         ],
         form: {
             scanner_enabled: false,
             scanner_interval_seconds: 60,
             scanner_bucket: '',
+            scanner_output_bucket: '',
             scanner_input_prefix: '',
             scanner_output_prefix: 'hls',
             scanner_output_template: 'file_base_name/hls/*',
             scanner_priority: 5,
-            s3_region: 'us-east-1',
+            s3_region: 'us-central-1',
             s3_access_key: '',
             s3_secret_key: '',
             s3_secret_configured: false,
-            s3_endpoint: 'https://s3.wasabisys.com',
+            s3_endpoint: 'https://s3.us-central-1.wasabisys.com',
             hls_video_codec: 'libx264',
             hls_video_bitrate: '2500k',
             hls_width: 1280,
             hls_height: 720,
             hls_framerate: 30,
+            hls_framerate_value: '30000/1001',
+            hls_gop_frames: 60,
             hls_audio_codec: 'aac',
             hls_audio_bitrate: '128k',
             hls_segment_seconds: 6,
@@ -249,7 +257,7 @@ function settingsPage() {
         },
 
         addRendition() {
-            this.ladder.push({ name: '360p', width: 640, height: 360, video_bitrate: '800k', audio_bitrate: this.form.hls_audio_bitrate || '128k' });
+            this.ladder.push({ name: '360p', width: 640, height: 360, video_bitrate: '550k', audio_bitrate: '64k', video_profile: 'main' });
         },
 
         removeRendition(index) {
@@ -265,9 +273,11 @@ function settingsPage() {
                 console.error('HLS ladder parse error:', e);
             }
             return [
-                { name: '1080p', width: 1920, height: 1080, video_bitrate: '5000k', audio_bitrate: this.form.hls_audio_bitrate || '128k' },
-                { name: '720p', width: 1280, height: 720, video_bitrate: '2800k', audio_bitrate: this.form.hls_audio_bitrate || '128k' },
-                { name: '480p', width: 854, height: 480, video_bitrate: '1400k', audio_bitrate: this.form.hls_audio_bitrate || '128k' },
+                { name: '1080p', width: 1920, height: 1080, video_bitrate: '4100k', audio_bitrate: '128k', video_profile: 'high' },
+                { name: '720p', width: 1280, height: 720, video_bitrate: '2200k', audio_bitrate: '128k', video_profile: 'high' },
+                { name: '480p', width: 848, height: 480, video_bitrate: '1000k', audio_bitrate: '96k', video_profile: 'high' },
+                { name: '360p', width: 640, height: 360, video_bitrate: '550k', audio_bitrate: '64k', video_profile: 'main' },
+                { name: '240p', width: 426, height: 240, video_bitrate: '300k', audio_bitrate: '64k', video_profile: 'main' },
             ];
         },
 
@@ -279,8 +289,31 @@ function settingsPage() {
                     height: Number(rendition.height || 0),
                     video_bitrate: String(rendition.video_bitrate || '').trim(),
                     audio_bitrate: String(rendition.audio_bitrate || this.form.hls_audio_bitrate || '').trim(),
+                    video_profile: String(rendition.video_profile || '').trim(),
                 }))
                 .filter((rendition) => rendition.width > 0 && rendition.height > 0 && rendition.video_bitrate);
+        },
+
+        async uploadSource() {
+            if (!this.uploadFile) return;
+            this.uploading = true;
+            this.uploadResult = '';
+            this.message = '';
+            try {
+                const body = new FormData();
+                body.append('file', this.uploadFile);
+                const resp = await fetch('/api/v1/upload', { method: 'POST', body });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    this.showMessage(data.error || 'Upload failed.', 'error');
+                } else {
+                    this.uploadResult = `Uploaded to s3://${data.bucket}/${data.key} and queued job ${data.job_id}`;
+                }
+            } catch (e) {
+                this.showMessage('Upload failed.', 'error');
+                console.error('Upload error:', e);
+            }
+            this.uploading = false;
         }
     };
 }

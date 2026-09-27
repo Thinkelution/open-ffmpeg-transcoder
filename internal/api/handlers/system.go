@@ -1,7 +1,13 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"path"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -9,7 +15,10 @@ import (
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/appsettings"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/config"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/database"
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/scanner"
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/storage"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/transcoder"
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/worker"
 )
 
 type SystemHandler struct {
@@ -110,4 +119,78 @@ func (h *SystemHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, settings.AppSettings)
+}
+
+func (h *SystemHandler) UploadSource(c *gin.Context) {
+	settings, err := appsettings.Load(c.Request.Context(), h.db, h.cfg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(settings.ScannerBucket) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "scan bucket is not configured"})
+		return
+	}
+	if strings.TrimSpace(settings.S3AccessKey) == "" || strings.TrimSpace(settings.S3SecretKey) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Wasabi credentials are not configured"})
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		return
+	}
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer src.Close()
+
+	key := uploadKey(settings.ScannerInputPrefix, file.Filename)
+	creds := storage.S3Credentials{
+		AccessKeyID:     settings.S3AccessKey,
+		SecretAccessKey: settings.S3SecretKey,
+		Region:          settings.S3Region,
+		Endpoint:        settings.S3Endpoint,
+	}
+	if err := storage.UploadObject(c.Request.Context(), creds, settings.ScannerBucket, key, src); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	job, err := scanner.CreateJobForKey(c.Request.Context(), h.db, settings, key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploaded file, but could not create job: " + err.Error()})
+		return
+	}
+	if err := worker.EnqueueJob(h.cfg, job.ID, job.Priority); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploaded file, but could not enqueue job: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bucket": settings.ScannerBucket,
+		"key":    key,
+		"job_id": job.ID,
+	})
+}
+
+var unsafeUploadChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+func uploadKey(prefix, filename string) string {
+	ext := filepath.Ext(filename)
+	base := strings.TrimSuffix(filepath.Base(filename), ext)
+	base = strings.Trim(unsafeUploadChars.ReplaceAllString(base, "-"), "-._")
+	if base == "" {
+		base = "video"
+	}
+	stamp := time.Now().UTC().Format("20060102T150405Z")
+	cleanPrefix := strings.Trim(prefix, "/")
+	name := fmt.Sprintf("%s-%s%s", base, stamp, strings.ToLower(ext))
+	if cleanPrefix == "" {
+		return name
+	}
+	return path.Join(cleanPrefix, name)
 }

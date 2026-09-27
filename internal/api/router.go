@@ -19,6 +19,7 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	}
 
 	r := gin.New()
+	r.MaxMultipartMemory = 64 << 20
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger())
 	r.Use(middleware.CORS())
@@ -68,6 +69,7 @@ func NewRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	v1.POST("/system/benchmark", sysH.Benchmark)
 	v1.GET("/settings", sysH.GetSettings)
 	v1.PUT("/settings", sysH.UpdateSettings)
+	v1.POST("/upload", sysH.UploadSource)
 
 	mediaH := handlers.NewMediaHandler(cfg)
 	v1.POST("/media/probe", mediaH.Probe)

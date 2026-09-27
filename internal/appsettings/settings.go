@@ -27,6 +27,7 @@ func Load(ctx context.Context, db *database.DB, cfg *config.Config) (RuntimeSett
 			ScannerEnabled:        database.BoolSetting(values, "scanner_enabled", cfg.ScannerEnabled),
 			ScannerIntervalSec:    database.IntSetting(values, "scanner_interval_seconds", cfg.ScannerIntervalSec),
 			ScannerBucket:         database.StringSetting(values, "scanner_bucket", cfg.ScannerBucket),
+			ScannerOutputBucket:   database.StringSetting(values, "scanner_output_bucket", cfg.ScannerOutputBucket),
 			ScannerInputPrefix:    cleanPrefix(database.StringSetting(values, "scanner_input_prefix", cfg.ScannerInputPrefix)),
 			ScannerOutputPrefix:   cleanPrefix(database.StringSetting(values, "scanner_output_prefix", cfg.ScannerOutputPrefix)),
 			ScannerOutputTemplate: strings.TrimSpace(database.StringSetting(values, "scanner_output_template", cfg.ScannerOutputTemplate)),
@@ -40,6 +41,8 @@ func Load(ctx context.Context, db *database.DB, cfg *config.Config) (RuntimeSett
 			HLSWidth:              database.IntSetting(values, "hls_width", cfg.HLSWidth),
 			HLSHeight:             database.IntSetting(values, "hls_height", cfg.HLSHeight),
 			HLSFramerate:          database.IntSetting(values, "hls_framerate", cfg.HLSFramerate),
+			HLSFramerateValue:     database.StringSetting(values, "hls_framerate_value", cfg.HLSFramerateValue),
+			HLSGOPFrames:          database.IntSetting(values, "hls_gop_frames", cfg.HLSGOPFrames),
 			HLSAudioCodec:         database.StringSetting(values, "hls_audio_codec", cfg.HLSAudioCodec),
 			HLSAudioBitrate:       database.StringSetting(values, "hls_audio_bitrate", cfg.HLSAudioBitrate),
 			HLSSegmentSeconds:     database.IntSetting(values, "hls_segment_seconds", cfg.HLSSegmentSeconds),
@@ -66,6 +69,12 @@ func Load(ctx context.Context, db *database.DB, cfg *config.Config) (RuntimeSett
 	if settings.HLSFramerate <= 0 {
 		settings.HLSFramerate = 30
 	}
+	if strings.TrimSpace(settings.HLSFramerateValue) == "" {
+		settings.HLSFramerateValue = "30000/1001"
+	}
+	if settings.HLSGOPFrames <= 0 {
+		settings.HLSGOPFrames = 60
+	}
 	if settings.HLSSegmentSeconds <= 0 {
 		settings.HLSSegmentSeconds = 6
 	}
@@ -81,6 +90,7 @@ func Save(ctx context.Context, db *database.DB, req database.UpdateAppSettingsRe
 		"scanner_enabled":          strconv.FormatBool(req.ScannerEnabled),
 		"scanner_interval_seconds": strconv.Itoa(defaultInt(req.ScannerIntervalSec, 60)),
 		"scanner_bucket":           strings.TrimSpace(req.ScannerBucket),
+		"scanner_output_bucket":    strings.TrimSpace(req.ScannerOutputBucket),
 		"scanner_input_prefix":     cleanPrefix(req.ScannerInputPrefix),
 		"scanner_output_prefix":    cleanPrefix(req.ScannerOutputPrefix),
 		"scanner_output_template":  strings.TrimSpace(req.ScannerOutputTemplate),
@@ -93,6 +103,8 @@ func Save(ctx context.Context, db *database.DB, req database.UpdateAppSettingsRe
 		"hls_width":                strconv.Itoa(defaultInt(req.HLSWidth, 1280)),
 		"hls_height":               strconv.Itoa(defaultInt(req.HLSHeight, 720)),
 		"hls_framerate":            strconv.Itoa(defaultInt(req.HLSFramerate, 30)),
+		"hls_framerate_value":      defaultString(req.HLSFramerateValue, "30000/1001"),
+		"hls_gop_frames":           strconv.Itoa(defaultInt(req.HLSGOPFrames, 60)),
 		"hls_audio_codec":          strings.TrimSpace(req.HLSAudioCodec),
 		"hls_audio_bitrate":        strings.TrimSpace(req.HLSAudioBitrate),
 		"hls_segment_seconds":      strconv.Itoa(defaultInt(req.HLSSegmentSeconds, 6)),
@@ -130,6 +142,7 @@ func normalizeLadder(value, defaultAudioBitrate string) string {
 		rendition.Name = strings.TrimSpace(rendition.Name)
 		rendition.VideoBitrate = strings.TrimSpace(rendition.VideoBitrate)
 		rendition.AudioBitrate = strings.TrimSpace(rendition.AudioBitrate)
+		rendition.VideoProfile = strings.TrimSpace(rendition.VideoProfile)
 		if rendition.Width <= 0 || rendition.Height <= 0 || rendition.VideoBitrate == "" {
 			continue
 		}
@@ -150,10 +163,20 @@ func defaultLadderJSON(defaultAudioBitrate string) string {
 		defaultAudioBitrate = "128k"
 	}
 	renditions := []database.HLSRendition{
-		{Name: "1080p", Width: 1920, Height: 1080, VideoBitrate: "5000k", AudioBitrate: defaultAudioBitrate},
-		{Name: "720p", Width: 1280, Height: 720, VideoBitrate: "2800k", AudioBitrate: defaultAudioBitrate},
-		{Name: "480p", Width: 854, Height: 480, VideoBitrate: "1400k", AudioBitrate: defaultAudioBitrate},
+		{Name: "1080p", Width: 1920, Height: 1080, VideoBitrate: "4100k", AudioBitrate: "128k", VideoProfile: "high"},
+		{Name: "720p", Width: 1280, Height: 720, VideoBitrate: "2200k", AudioBitrate: "128k", VideoProfile: "high"},
+		{Name: "480p", Width: 848, Height: 480, VideoBitrate: "1000k", AudioBitrate: "96k", VideoProfile: "high"},
+		{Name: "360p", Width: 640, Height: 360, VideoBitrate: "550k", AudioBitrate: "64k", VideoProfile: "main"},
+		{Name: "240p", Width: 426, Height: 240, VideoBitrate: "300k", AudioBitrate: "64k", VideoProfile: "main"},
 	}
 	out, _ := json.Marshal(renditions)
 	return string(out)
+}
+
+func defaultString(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }

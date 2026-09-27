@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,30 @@ func (s *S3Storage) Download(ctx context.Context, localPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func UploadObject(ctx context.Context, creds S3Credentials, bucket, key string, body io.Reader) error {
+	store := &S3Storage{Creds: creds}
+	client, err := store.client(ctx)
+	if err != nil {
+		return err
+	}
+
+	input := &s3.PutObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+		Body:   body,
+	}
+	if contentType := contentTypeForKey(key); contentType != nil {
+		input.ContentType = contentType
+	} else if guessed := mime.TypeByExtension(filepath.Ext(key)); guessed != "" {
+		input.ContentType = &guessed
+	}
+
+	if _, err := client.PutObject(ctx, input); err != nil {
+		return fmt.Errorf("S3 PutObject %s: %w", key, err)
+	}
 	return nil
 }
 

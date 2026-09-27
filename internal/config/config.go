@@ -33,6 +33,7 @@ type Config struct {
 	ScannerEnabled        bool
 	ScannerIntervalSec    int
 	ScannerBucket         string
+	ScannerOutputBucket   string
 	ScannerInputPrefix    string
 	ScannerOutputPrefix   string
 	ScannerOutputTemplate string
@@ -42,6 +43,8 @@ type Config struct {
 	HLSWidth              int
 	HLSHeight             int
 	HLSFramerate          int
+	HLSFramerateValue     string
+	HLSGOPFrames          int
 	HLSAudioCodec         string
 	HLSAudioBitrate       string
 	HLSSegmentSeconds     int
@@ -73,6 +76,7 @@ func Load() *Config {
 		ScannerEnabled:        getEnvBool("SCANNER_ENABLED", false),
 		ScannerIntervalSec:    getEnvInt("SCANNER_INTERVAL_SECONDS", 60),
 		ScannerBucket:         getEnv("SCANNER_BUCKET", ""),
+		ScannerOutputBucket:   getEnv("SCANNER_OUTPUT_BUCKET", ""),
 		ScannerInputPrefix:    strings.Trim(strings.TrimPrefix(getEnv("SCANNER_INPUT_PREFIX", ""), "/"), " "),
 		ScannerOutputPrefix:   strings.Trim(strings.Trim(getEnv("SCANNER_OUTPUT_PREFIX", "hls"), "/"), " "),
 		ScannerOutputTemplate: strings.TrimSpace(getEnv("SCANNER_OUTPUT_TEMPLATE", "")),
@@ -82,6 +86,8 @@ func Load() *Config {
 		HLSWidth:              getEnvInt("HLS_WIDTH", 1280),
 		HLSHeight:             getEnvInt("HLS_HEIGHT", 720),
 		HLSFramerate:          getEnvInt("HLS_FRAMERATE", 30),
+		HLSFramerateValue:     getEnv("HLS_FRAMERATE_VALUE", "30000/1001"),
+		HLSGOPFrames:          getEnvInt("HLS_GOP_FRAMES", 60),
 		HLSAudioCodec:         getEnv("HLS_AUDIO_CODEC", "aac"),
 		HLSAudioBitrate:       getEnv("HLS_AUDIO_BITRATE", "128k"),
 		HLSSegmentSeconds:     getEnvInt("HLS_SEGMENT_SECONDS", 6),

@@ -94,7 +94,7 @@ func (s *Scanner) scanOnce(ctx context.Context, settings appsettings.RuntimeSett
 			continue
 		}
 
-		job, err := s.createJob(ctx, settings, creds, key)
+		job, err := CreateJobForKey(ctx, s.db, settings, key)
 		if err != nil {
 			log.Printf("[scanner] Could not create job for %s: %v", key, err)
 			continue
@@ -107,12 +107,23 @@ func (s *Scanner) scanOnce(ctx context.Context, settings appsettings.RuntimeSett
 	}
 }
 
-func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSettings, creds storage.S3Credentials, key string) (*database.Job, error) {
+func CreateJobForKey(ctx context.Context, db *database.DB, settings appsettings.RuntimeSettings, key string) (*database.Job, error) {
+	creds := storage.S3Credentials{
+		AccessKeyID:     settings.S3AccessKey,
+		SecretAccessKey: settings.S3SecretKey,
+		Region:          settings.S3Region,
+		Endpoint:        settings.S3Endpoint,
+	}
 	outputKey := outputPrefixForKey(settings, key)
+	outputBucket := strings.TrimSpace(settings.ScannerOutputBucket)
+	if outputBucket == "" {
+		outputBucket = settings.ScannerBucket
+	}
 	metadata, _ := json.Marshal(map[string]string{
-		"scanner_bucket":     settings.ScannerBucket,
-		"scanner_source_key": key,
-		"hls_prefix":         outputKey,
+		"scanner_bucket":        settings.ScannerBucket,
+		"scanner_output_bucket": outputBucket,
+		"scanner_source_key":    key,
+		"hls_prefix":            outputKey,
 	})
 	credsJSON, _ := json.Marshal(creds)
 	var renditions []database.HLSRendition
@@ -126,7 +137,7 @@ func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSet
 		}}
 	}
 
-	return s.db.CreateJob(ctx, &database.CreateJobRequest{
+	return db.CreateJob(ctx, &database.CreateJobRequest{
 		Input: database.StorageConfig{
 			Type:        "s3",
 			URL:         fmt.Sprintf("s3://%s/%s", settings.ScannerBucket, key),
@@ -134,7 +145,7 @@ func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSet
 		},
 		Output: database.StorageConfig{
 			Type:        "s3",
-			URL:         fmt.Sprintf("s3://%s/%s", settings.ScannerBucket, outputKey),
+			URL:         fmt.Sprintf("s3://%s/%s", outputBucket, outputKey),
 			Credentials: credsJSON,
 		},
 		Settings: database.TranscodeSettings{
@@ -166,6 +177,8 @@ func (s *Scanner) createJob(ctx context.Context, settings appsettings.RuntimeSet
 				AudioCodec:     settings.HLSAudioCodec,
 				AudioBitrate:   settings.HLSAudioBitrate,
 				Framerate:      settings.HLSFramerate,
+				FramerateValue: settings.HLSFramerateValue,
+				GOPFrames:      settings.HLSGOPFrames,
 				Renditions:     renditions,
 			},
 		},

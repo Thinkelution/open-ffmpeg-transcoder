@@ -92,6 +92,8 @@ type HLSSettings struct {
 	AudioCodec     string         `json:"audio_codec,omitempty"`
 	AudioBitrate   string         `json:"audio_bitrate,omitempty"`
 	Framerate      int            `json:"framerate,omitempty"`
+	FramerateValue string         `json:"framerate_value,omitempty"`
+	GOPFrames      int            `json:"gop_frames,omitempty"`
 	Renditions     []HLSRendition `json:"renditions,omitempty"`
 }
 
@@ -101,6 +103,7 @@ type HLSRendition struct {
 	Height       int    `json:"height"`
 	VideoBitrate string `json:"video_bitrate"`
 	AudioBitrate string `json:"audio_bitrate,omitempty"`
+	VideoProfile string `json:"video_profile,omitempty"`
 }
 
 type CreateJobRequest struct {
@@ -138,6 +141,7 @@ type AppSettings struct {
 	ScannerEnabled        bool   `json:"scanner_enabled"`
 	ScannerIntervalSec    int    `json:"scanner_interval_seconds"`
 	ScannerBucket         string `json:"scanner_bucket"`
+	ScannerOutputBucket   string `json:"scanner_output_bucket"`
 	ScannerInputPrefix    string `json:"scanner_input_prefix"`
 	ScannerOutputPrefix   string `json:"scanner_output_prefix"`
 	ScannerOutputTemplate string `json:"scanner_output_template"`
@@ -151,6 +155,8 @@ type AppSettings struct {
 	HLSWidth              int    `json:"hls_width"`
 	HLSHeight             int    `json:"hls_height"`
 	HLSFramerate          int    `json:"hls_framerate"`
+	HLSFramerateValue     string `json:"hls_framerate_value"`
+	HLSGOPFrames          int    `json:"hls_gop_frames"`
 	HLSAudioCodec         string `json:"hls_audio_codec"`
 	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
 	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
@@ -161,6 +167,7 @@ type UpdateAppSettingsRequest struct {
 	ScannerEnabled        bool   `json:"scanner_enabled"`
 	ScannerIntervalSec    int    `json:"scanner_interval_seconds"`
 	ScannerBucket         string `json:"scanner_bucket"`
+	ScannerOutputBucket   string `json:"scanner_output_bucket"`
 	ScannerInputPrefix    string `json:"scanner_input_prefix"`
 	ScannerOutputPrefix   string `json:"scanner_output_prefix"`
 	ScannerOutputTemplate string `json:"scanner_output_template"`
@@ -174,6 +181,8 @@ type UpdateAppSettingsRequest struct {
 	HLSWidth              int    `json:"hls_width"`
 	HLSHeight             int    `json:"hls_height"`
 	HLSFramerate          int    `json:"hls_framerate"`
+	HLSFramerateValue     string `json:"hls_framerate_value"`
+	HLSGOPFrames          int    `json:"hls_gop_frames"`
 	HLSAudioCodec         string `json:"hls_audio_codec"`
 	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
 	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`

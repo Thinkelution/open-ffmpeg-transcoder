@@ -24,16 +24,20 @@
                 </label>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label class="block">
-                        <span class="text-sm text-gray-300">Bucket</span>
-                        <input x-model="form.scanner_bucket" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="my-video-bucket">
+                        <span class="text-sm text-gray-300">Scan bucket</span>
+                        <input x-model="form.scanner_bucket" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="master-uploader">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm text-gray-300">HLS output bucket</span>
+                        <input x-model="form.scanner_output_bucket" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="master-video-library">
                     </label>
                     <label class="block">
                         <span class="text-sm text-gray-300">Region</span>
-                        <input x-model="form.s3_region" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="us-east-1">
+                        <input x-model="form.s3_region" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="us-central-1">
                     </label>
                     <label class="block">
                         <span class="text-sm text-gray-300">Endpoint</span>
-                        <input x-model="form.s3_endpoint" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="https://s3.wasabisys.com">
+                        <input x-model="form.s3_endpoint" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="https://s3.us-central-1.wasabisys.com">
                     </label>
                     <label class="block">
                         <span class="text-sm text-gray-300">Scan interval seconds</span>
@@ -78,6 +82,21 @@
         <section class="bg-gray-900 rounded-lg border border-gray-800 p-6 lg:col-span-2">
             <div class="flex items-center justify-between mb-4">
                 <div>
+                    <h2 class="text-lg font-semibold">Upload Source Video</h2>
+                    <p class="text-sm text-gray-400 mt-1">Upload a source file into the scan bucket. The scanner will pick it up from the configured input prefix.</p>
+                </div>
+                <button @click="uploadSource()" :disabled="uploading || !uploadFile" class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+                    <span x-show="!uploading">Upload</span>
+                    <span x-show="uploading">Uploading...</span>
+                </button>
+            </div>
+            <input type="file" @change="uploadFile = $event.target.files[0]" accept="video/*,.mxf,.ts,.mts,.m2ts" class="block w-full text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gray-800 file:px-4 file:py-2 file:text-sm file:text-gray-100 hover:file:bg-gray-700">
+            <p x-show="uploadResult" class="mt-3 text-sm text-emerald-300" x-text="uploadResult"></p>
+        </section>
+
+        <section class="bg-gray-900 rounded-lg border border-gray-800 p-6 lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+                <div>
                     <h2 class="text-lg font-semibold">HLS Ladder</h2>
                     <p class="text-sm text-gray-400 mt-1">Create a master playlist with one variant playlist per rendition.</p>
                 </div>
@@ -90,7 +109,7 @@
                 </label>
                 <label class="block">
                     <span class="text-sm text-gray-300">Frame rate</span>
-                    <input type="number" min="1" x-model.number="form.hls_framerate" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                    <input x-model="form.hls_framerate_value" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="30000/1001">
                 </label>
                 <label class="block">
                     <span class="text-sm text-gray-300">Audio codec</span>
@@ -104,6 +123,10 @@
                     <span class="text-sm text-gray-300">Segment seconds</span>
                     <input type="number" min="1" x-model.number="form.hls_segment_seconds" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
                 </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">GOP frames</span>
+                    <input type="number" min="1" x-model.number="form.hls_gop_frames" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                </label>
             </div>
             <div class="overflow-x-auto border border-gray-800 rounded-lg">
                 <table class="w-full text-sm">
@@ -114,6 +137,7 @@
                             <th class="px-4 py-3">Height</th>
                             <th class="px-4 py-3">Video bitrate</th>
                             <th class="px-4 py-3">Audio bitrate</th>
+                            <th class="px-4 py-3">Profile</th>
                             <th class="px-4 py-3"></th>
                         </tr>
                     </thead>
@@ -125,6 +149,13 @@
                                 <td class="px-4 py-3"><input type="number" min="1" x-model.number="rendition.height" class="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"></td>
                                 <td class="px-4 py-3"><input x-model="rendition.video_bitrate" class="w-32 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="2800k"></td>
                                 <td class="px-4 py-3"><input x-model="rendition.audio_bitrate" class="w-32 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="128k"></td>
+                                <td class="px-4 py-3">
+                                    <select x-model="rendition.video_profile" class="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+                                        <option value="high">High</option>
+                                        <option value="main">Main</option>
+                                        <option value="baseline">Baseline</option>
+                                    </select>
+                                </td>
                                 <td class="px-4 py-3 text-right">
                                     <button @click="removeRendition(index)" :disabled="ladder.length <= 1" class="text-red-400 hover:underline disabled:opacity-40 disabled:no-underline">Remove</button>
                                 </td>
