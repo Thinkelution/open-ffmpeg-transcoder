@@ -61,6 +61,10 @@ function dashboard() {
         counts: {},
         jobs: [],
         videos: [],
+        uploading: false,
+        uploadFile: null,
+        uploadResult: '',
+        uploadError: '',
         statuses: [
             { key: 'pending', label: 'Pending', color: 'text-gray-300' },
             { key: 'downloading', label: 'Downloading', color: 'text-blue-400' },
@@ -71,6 +75,28 @@ function dashboard() {
             { key: 'cancelled', label: 'Cancelled', color: 'text-gray-400' },
         ],
         statusClass,
+
+        async uploadSource() {
+            if (!this.uploadFile) return;
+            this.uploading = true;
+            this.uploadResult = '';
+            this.uploadError = '';
+            try {
+                const body = new FormData();
+                body.append('file', this.uploadFile);
+                const resp = await fetch('/api/v1/upload', { method: 'POST', body });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Upload failed');
+                }
+                this.uploadResult = `Uploaded and queued job ${data.job_id}`;
+                this.uploadFile = null;
+                await this.refresh();
+            } catch (e) {
+                this.uploadError = e.message || 'Upload failed';
+            }
+            this.uploading = false;
+        },
 
         async refresh() {
             try {
