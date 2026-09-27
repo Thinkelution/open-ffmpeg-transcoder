@@ -8,11 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/config"
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/database"
 )
 
 type S3Storage struct {
@@ -104,6 +108,30 @@ func (s *S3Storage) Download(ctx context.Context, localPath string) error {
 	}
 
 	return nil
+}
+
+func PresignGetObject(ctx context.Context, sc database.StorageConfig, cfg *config.Config, expires time.Duration) (string, error) {
+	creds := resolveS3Creds(sc.Credentials, cfg)
+	store := &S3Storage{URL: sc.URL, Creds: creds}
+	bucket, key, err := store.parsePath()
+	if err != nil {
+		return "", err
+	}
+	client, err := store.client(ctx)
+	if err != nil {
+		return "", err
+	}
+	presigner := s3.NewPresignClient(client)
+	result, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = expires
+	})
+	if err != nil {
+		return "", fmt.Errorf("presign S3 GetObject %s: %w", key, err)
+	}
+	return result.URL, nil
 }
 
 func UploadObject(ctx context.Context, creds S3Credentials, bucket, key string, body io.Reader) error {

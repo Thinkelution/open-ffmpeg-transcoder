@@ -44,8 +44,8 @@
                 <template x-for="video in videos" :key="video.job_id">
                     <button type="button" @click="playVideo(video)" class="group text-left rounded-xl border border-gray-800 bg-gray-950 overflow-hidden transition hover:border-emerald-500/70 focus:outline-none focus:ring-2 focus:ring-emerald-500/70" :class="video.playable ? 'cursor-pointer' : 'cursor-default'">
                         <div class="relative aspect-video bg-gradient-to-br from-gray-800 via-gray-900 to-black flex items-center justify-center">
-                            <template x-if="video.thumbnail_ready">
-                                <img class="absolute inset-0 h-full w-full object-cover" :src="'/api/v1/media/uploads/' + video.job_id + '/thumbnail'" :alt="video.name" @error="video.thumbnail_ready = false">
+                            <template x-if="video.thumbnail_url">
+                                <img class="absolute inset-0 h-full w-full object-cover" :src="video.thumbnail_url" :alt="video.name" @error="video.thumbnail_url = ''; video.thumbnail_ready = false">
                             </template>
                             <div x-show="!video.thumbnail_ready" class="text-center px-4">
                                 <div class="mx-auto mb-3 h-12 w-12 rounded-full border border-gray-700 flex items-center justify-center text-2xl text-emerald-400">▶</div>

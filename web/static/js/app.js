@@ -157,7 +157,7 @@ function dashboard() {
                 const [health, jobsResp, uploadsResp] = await Promise.all([
                     apiGet('/api/v1/system/health'),
                     apiGet('/api/v1/jobs?limit=10'),
-                    apiGet('/api/v1/media/uploads?limit=24'),
+                    apiGet('/api/v1/media/uploads?limit=24&thumbs=1'),
                 ]);
                 this.counts = health.jobs || {};
                 this.jobs = jobsResp.jobs || [];
