@@ -254,6 +254,81 @@ func contentTypeForKey(key string) *string {
 	return &contentType
 }
 
+func DeleteObject(ctx context.Context, sc database.StorageConfig, cfg *config.Config) error {
+	creds := resolveS3Creds(sc.Credentials, cfg)
+	store := &S3Storage{URL: sc.URL, Creds: creds}
+	bucket, key, err := store.parsePath()
+	if err != nil {
+		return err
+	}
+	client, err := store.client(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return fmt.Errorf("S3 DeleteObject %s: %w", key, err)
+	}
+	return nil
+}
+
+func DeletePrefix(ctx context.Context, sc database.StorageConfig, cfg *config.Config) (int, error) {
+	creds := resolveS3Creds(sc.Credentials, cfg)
+	store := &S3Storage{URL: sc.URL, Creds: creds}
+	bucket, prefix, err := store.parsePath()
+	if err != nil {
+		return 0, err
+	}
+	prefix = strings.Trim(prefix, "/")
+	if prefix == "" {
+		return 0, fmt.Errorf("refusing to delete empty S3 prefix")
+	}
+	client, err := store.client(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	deleted := 0
+	quiet := true
+	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
+		Bucket: &bucket,
+		Prefix: &prefix,
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return deleted, fmt.Errorf("S3 ListObjectsV2: %w", err)
+		}
+		objects := make([]types.ObjectIdentifier, 0, len(page.Contents))
+		for _, object := range page.Contents {
+			if object.Key == nil {
+				continue
+			}
+			key := *object.Key
+			objects = append(objects, types.ObjectIdentifier{Key: &key})
+		}
+		for len(objects) > 0 {
+			batch := objects
+			if len(batch) > 1000 {
+				batch = objects[:1000]
+			}
+			_, err := client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+				Bucket: &bucket,
+				Delete: &types.Delete{Objects: batch, Quiet: &quiet},
+			})
+			if err != nil {
+				return deleted, fmt.Errorf("S3 DeleteObjects %s: %w", prefix, err)
+			}
+			deleted += len(batch)
+			objects = objects[len(batch):]
+		}
+	}
+	return deleted, nil
+}
+
 // ListObjects returns object keys under the provided prefix.
 func ListObjects(ctx context.Context, creds S3Credentials, bucket, prefix string) ([]types.Object, error) {
 	store := &S3Storage{Creds: creds}

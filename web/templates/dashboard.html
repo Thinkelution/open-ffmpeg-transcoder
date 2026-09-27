@@ -42,7 +42,7 @@
         <div class="p-6">
             <div x-show="videos.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 <template x-for="video in videos" :key="video.job_id">
-                    <button type="button" @click="playVideo(video)" class="group text-left rounded-xl border border-gray-800 bg-gray-950 overflow-hidden transition hover:border-emerald-500/70 focus:outline-none focus:ring-2 focus:ring-emerald-500/70" :class="video.playable ? 'cursor-pointer' : 'cursor-default'">
+                    <div role="button" tabindex="0" @click="playVideo(video)" @keydown.enter.prevent="playVideo(video)" @keydown.space.prevent="playVideo(video)" class="group text-left rounded-xl border border-gray-800 bg-gray-950 overflow-hidden transition hover:border-emerald-500/70 focus:outline-none focus:ring-2 focus:ring-emerald-500/70" :class="video.playable ? 'cursor-pointer' : 'cursor-default'">
                         <div class="relative aspect-video bg-gradient-to-br from-gray-800 via-gray-900 to-black flex items-center justify-center">
                             <template x-if="video.thumbnail_url">
                                 <img class="absolute inset-0 h-full w-full object-cover" :src="video.thumbnail_url" :alt="video.name" @error="video.thumbnail_url = ''; video.thumbnail_ready = false">
@@ -69,11 +69,14 @@
                             </div>
                             <div class="flex items-center justify-between gap-3">
                                 <span class="px-2 py-1 rounded-full text-xs font-medium" :class="statusClass(video.status)" x-text="video.status"></span>
-                                <span class="text-xs text-gray-500 font-mono" x-text="video.job_id.substring(0, 8)"></span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-500 font-mono" x-text="video.job_id.substring(0, 8)"></span>
+                                    <button type="button" @click.stop="deleteVideo(video)" class="rounded-md border border-red-900/70 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40">Delete</button>
+                                </div>
                             </div>
                             <div class="text-xs text-gray-500 truncate" :title="video.output_prefix" x-text="video.output_bucket ? video.output_bucket + '/' + video.output_prefix : 'Output pending'"></div>
                         </div>
-                    </button>
+                    </div>
                 </template>
             </div>
             <div x-show="videos.length === 0" class="rounded-lg border border-dashed border-gray-800 p-8 text-center text-gray-500">

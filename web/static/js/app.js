@@ -110,6 +110,20 @@ function dashboard() {
             this.$nextTick(() => this.attachPlayer(video.playback_url));
         },
 
+        async deleteVideo(video) {
+            if (!video || !video.job_id) return;
+            if (!confirm(`Delete ${video.name || 'this video'}? This removes the source upload, HLS output, and job record.`)) return;
+            try {
+                const data = await apiDelete('/api/v1/media/uploads/' + video.job_id);
+                if (data.error) throw new Error(data.error);
+                this.videos = this.videos.filter((item) => item.job_id !== video.job_id);
+                this.jobs = this.jobs.filter((job) => job.id !== video.job_id);
+                await this.refresh();
+            } catch (e) {
+                alert(e.message || 'Delete failed');
+            }
+        },
+
         async copyShareLink(video) {
             if (!video || !video.share_url) return;
             try {

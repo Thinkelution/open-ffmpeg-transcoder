@@ -158,6 +158,62 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"uploads": items})
 }
 
+func (h *MediaHandler) DeleteUpload(c *gin.Context) {
+	jobID := c.Param("id")
+	job, err := h.db.GetJob(c.Request.Context(), jobID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if job == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+
+	if job.Status == database.JobStatusPending || job.Status == database.JobStatusDownloading ||
+		job.Status == database.JobStatusTranscoding || job.Status == database.JobStatusUploading {
+		_ = h.db.UpdateJobStatus(c.Request.Context(), jobID, database.JobStatusCancelled)
+	}
+
+	var inputCfg database.StorageConfig
+	var outputCfg database.StorageConfig
+	json.Unmarshal(job.InputConfig, &inputCfg)
+	json.Unmarshal(job.OutputConfig, &outputCfg)
+
+	deletedOutputObjects := 0
+	deletedSource := false
+	warnings := []string{}
+
+	if outputCfg.Type == "s3" {
+		count, err := storage.DeletePrefix(c.Request.Context(), outputCfg, h.cfg)
+		if err != nil {
+			warnings = append(warnings, "output cleanup failed: "+err.Error())
+		} else {
+			deletedOutputObjects = count
+		}
+	}
+
+	if inputCfg.Type == "s3" {
+		if err := storage.DeleteObject(c.Request.Context(), inputCfg, h.cfg); err != nil {
+			warnings = append(warnings, "source cleanup failed: "+err.Error())
+		} else {
+			deletedSource = true
+		}
+	}
+
+	if err := h.db.DeleteJob(c.Request.Context(), jobID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":                "video deleted",
+		"deleted_source":         deletedSource,
+		"deleted_output_objects": deletedOutputObjects,
+		"warnings":               warnings,
+	})
+}
+
 func (h *MediaHandler) Thumbnail(c *gin.Context) {
 	jobID := c.Param("id")
 	job, err := h.db.GetJob(c.Request.Context(), jobID)
