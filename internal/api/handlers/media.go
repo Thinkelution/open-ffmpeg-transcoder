@@ -125,11 +125,13 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 		}
 
 		playbackURL := fmt.Sprintf("/api/v1/media/uploads/%s/hls/master.m3u8", job.ID)
+		cdnURL := ""
 		shareURL := ""
 		thumbnailURL := ""
 		if playable {
 			shareURL = h.publicPlayerURL(c, job.ID)
-			if cdnURL := cdnAssetURL(runtimeSettings.HLSCDNBaseURL, outputPrefix, "master.m3u8"); cdnURL != "" {
+			cdnURL = cdnAssetURL(runtimeSettings.HLSCDNBaseURL, outputPrefix, "master.m3u8")
+			if cdnURL != "" {
 				playbackURL = cdnURL
 			}
 		}
@@ -154,6 +156,7 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			"output_prefix":   outputPrefix,
 			"master_playlist": childStorageURL(outputCfg.URL, "master.m3u8"),
 			"playback_url":    playbackURL,
+			"cdn_url":         cdnURL,
 			"share_url":       shareURL,
 			"thumbnail_ready": thumbnailReady,
 			"thumbnail_url":   thumbnailURL,
@@ -330,7 +333,7 @@ let hls=null;
 function label(level,index){const height=level&&level.height?level.height+'p':'Level '+(index+1);const rate=level&&level.bitrate?' · '+Math.round(level.bitrate/1000)+' kbps':'';return height+rate;}
 function setStatus(text){statusEl.textContent=text;}
 if(window.Hls&&window.Hls.isSupported()){
-  hls=new Hls({capLevelToPlayerSize:true});
+  hls=new Hls({capLevelToPlayerSize:true,enableWorker:false,lowLatencyMode:false,fragLoadingMaxRetry:6,manifestLoadingMaxRetry:4,levelLoadingMaxRetry:4});
   hls.loadSource(src);
   hls.attachMedia(video);
   hls.on(Hls.Events.MANIFEST_PARSED,()=>{
@@ -340,7 +343,18 @@ if(window.Hls&&window.Hls.isSupported()){
     video.play().catch(()=>{});
   });
   hls.on(Hls.Events.LEVEL_SWITCHED,(_,data)=>{if(quality.value==='-1')setStatus('Auto · '+label(hls.levels[data.level],data.level));});
-  hls.on(Hls.Events.ERROR,(_,data)=>{setStatus(data&&data.details?data.details:'Playback error');});
+  video.addEventListener('waiting',()=>setStatus('Buffering...'));
+  video.addEventListener('stalled',()=>{setStatus('Resuming stream...');hls.startLoad();});
+  hls.on(Hls.Events.ERROR,(_,data)=>{
+    if(!data){setStatus('Playback error');return;}
+    if(data.fatal){
+      if(data.type===Hls.ErrorTypes.MEDIA_ERROR){setStatus('Recovering playback...');hls.recoverMediaError();return;}
+      if(data.type===Hls.ErrorTypes.NETWORK_ERROR){setStatus('Retrying stream...');hls.startLoad();return;}
+      setStatus('Playback stopped');return;
+    }
+    if(data.details==='internalException'){setStatus('Recovering playback...');hls.recoverMediaError();hls.startLoad();video.play().catch(()=>{});return;}
+    if(data.details)setStatus(data.details);
+  });
   quality.addEventListener('change',()=>{hls.currentLevel=Number(quality.value);setStatus(quality.value==='-1'?'Auto quality':('Locked · '+quality.options[quality.selectedIndex].textContent));});
 }else if(video.canPlayType('application/vnd.apple.mpegurl')){
   video.src=src;

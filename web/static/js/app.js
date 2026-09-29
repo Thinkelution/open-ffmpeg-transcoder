@@ -207,14 +207,16 @@ function dashboard() {
             }
         },
 
-        async copyShareLink(video) {
-            if (!video || !video.share_url) return;
+        async copyPlaybackURL(video) {
+            if (!video) return;
+            const url = video.cdn_url || video.playback_url || video.share_url;
+            if (!url) return;
             try {
-                await navigator.clipboard.writeText(video.share_url);
-                this.shareMessage = 'Playback link copied';
+                await navigator.clipboard.writeText(url);
+                this.shareMessage = video.cdn_url ? 'CDN HLS URL copied' : 'Playback URL copied';
                 setTimeout(() => { this.shareMessage = ''; }, 2500);
             } catch (e) {
-                this.shareMessage = video.share_url;
+                this.shareMessage = url;
             }
         },
 
@@ -264,7 +266,17 @@ function dashboard() {
                 return;
             }
             if (window.Hls && window.Hls.isSupported()) {
-                this.hlsPlayer = new window.Hls({ capLevelToPlayerSize: true });
+                this.hlsPlayer = new window.Hls({
+                    capLevelToPlayerSize: true,
+                    enableWorker: false,
+                    lowLatencyMode: false,
+                    startLevel: -1,
+                    maxBufferLength: 30,
+                    backBufferLength: 30,
+                    fragLoadingMaxRetry: 6,
+                    manifestLoadingMaxRetry: 4,
+                    levelLoadingMaxRetry: 4,
+                });
                 this.hlsPlayer.loadSource(url);
                 this.hlsPlayer.attachMedia(player);
                 this.hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, () => {
@@ -278,8 +290,40 @@ function dashboard() {
                         this.playerStatus = `Auto · ${this.levelLabel(this.hlsPlayer.levels[data.level], data.level)}`;
                     }
                 });
+                player.addEventListener('waiting', () => { this.playerStatus = 'Buffering...'; });
+                player.addEventListener('stalled', () => {
+                    this.playerStatus = 'Resuming stream...';
+                    this.hlsPlayer.startLoad();
+                });
                 this.hlsPlayer.on(window.Hls.Events.ERROR, (_, data) => {
-                    this.playerStatus = data && data.details ? data.details : 'Playback error';
+                    if (!data) {
+                        this.playerStatus = 'Playback error';
+                        return;
+                    }
+                    if (data.fatal) {
+                        if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
+                            this.playerStatus = 'Recovering playback...';
+                            this.hlsPlayer.recoverMediaError();
+                            return;
+                        }
+                        if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
+                            this.playerStatus = 'Retrying stream...';
+                            this.hlsPlayer.startLoad();
+                            return;
+                        }
+                        this.playerStatus = 'Playback stopped';
+                        return;
+                    }
+                    if (data.details === 'internalException') {
+                        this.playerStatus = 'Recovering playback...';
+                        this.hlsPlayer.recoverMediaError();
+                        this.hlsPlayer.startLoad();
+                        player.play().catch(() => {});
+                        return;
+                    }
+                    if (data.details) {
+                        this.playerStatus = data.details;
+                    }
                 });
             } else {
                 this.playerStatus = 'This browser cannot play HLS.';
