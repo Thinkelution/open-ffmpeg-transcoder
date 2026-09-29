@@ -195,7 +195,7 @@ func uploadKey(prefix, filename string) string {
 	if base == "" {
 		base = "video"
 	}
-	stamp := time.Now().UTC().Format("20060102T150405Z")
+	stamp := time.Now().UTC().Format("20060102T150405.000000000Z")
 	cleanPrefix := strings.Trim(prefix, "/")
 	name := fmt.Sprintf("%s-%s%s", base, stamp, strings.ToLower(ext))
 	if cleanPrefix == "" {

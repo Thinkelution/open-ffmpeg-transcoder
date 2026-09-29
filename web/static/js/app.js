@@ -62,9 +62,11 @@ function dashboard() {
         jobs: [],
         videos: [],
         uploading: false,
-        uploadFile: null,
+        uploadFiles: [],
+        uploadQueue: [],
         uploadResult: '',
         uploadError: '',
+        draggingUpload: false,
         selectedVideo: null,
         hlsPlayer: null,
         qualityLevels: [],
@@ -82,24 +84,105 @@ function dashboard() {
         ],
         statusClass,
 
+        selectUploadFiles(fileList) {
+            const files = Array.from(fileList || []).filter((file) => file && file.name);
+            this.uploadFiles = files;
+            this.uploadQueue = files.map((file, index) => ({
+                id: `${Date.now()}-${index}-${file.name}`,
+                file,
+                name: file.name,
+                size: file.size,
+                progress: 0,
+                status: 'ready',
+                message: '',
+                jobId: '',
+            }));
+            this.uploadResult = '';
+            this.uploadError = '';
+        },
+
+        handleUploadDrop(event) {
+            this.draggingUpload = false;
+            this.selectUploadFiles(event.dataTransfer.files);
+        },
+
+        clearUploadQueue() {
+            if (this.uploading) return;
+            this.uploadFiles = [];
+            this.uploadQueue = [];
+            this.uploadResult = '';
+            this.uploadError = '';
+            const input = document.getElementById('source-upload-input');
+            if (input) input.value = '';
+        },
+
+        formatBytes(bytes) {
+            if (!bytes) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let value = bytes;
+            let unit = 0;
+            while (value >= 1024 && unit < units.length - 1) {
+                value /= 1024;
+                unit += 1;
+            }
+            return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+        },
+
+        uploadQueueItem(item) {
+            return new Promise((resolve) => {
+                const body = new FormData();
+                body.append('file', item.file);
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/v1/upload');
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        item.progress = Math.round((event.loaded / event.total) * 100);
+                    }
+                };
+                xhr.onload = () => {
+                    let data = {};
+                    try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        item.progress = 100;
+                        item.status = 'queued';
+                        item.jobId = data.job_id || '';
+                        item.message = item.jobId ? `Queued ${item.jobId.substring(0, 8)}` : 'Queued';
+                    } else {
+                        item.status = 'failed';
+                        item.message = data.error || `Upload failed (${xhr.status})`;
+                    }
+                    resolve(item);
+                };
+                xhr.onerror = () => {
+                    item.status = 'failed';
+                    item.message = 'Network error';
+                    resolve(item);
+                };
+                xhr.send(body);
+            });
+        },
+
         async uploadSource() {
-            if (!this.uploadFile) return;
+            if (!this.uploadQueue.length) return;
             this.uploading = true;
             this.uploadResult = '';
             this.uploadError = '';
-            try {
-                const body = new FormData();
-                body.append('file', this.uploadFile);
-                const resp = await fetch('/api/v1/upload', { method: 'POST', body });
-                const data = await resp.json();
-                if (!resp.ok) {
-                    throw new Error(data.error || 'Upload failed');
-                }
-                this.uploadResult = `Uploaded and queued job ${data.job_id}`;
-                this.uploadFile = null;
+            let uploaded = 0;
+            let failed = 0;
+            for (const item of this.uploadQueue) {
+                item.status = 'uploading';
+                item.message = 'Uploading...';
+                item.progress = 0;
+                await this.uploadQueueItem(item);
+                if (item.status === 'queued') uploaded += 1;
+                if (item.status === 'failed') failed += 1;
                 await this.refresh();
-            } catch (e) {
-                this.uploadError = e.message || 'Upload failed';
+            }
+            this.uploadResult = failed === 0
+                ? `${uploaded} file${uploaded === 1 ? '' : 's'} uploaded and queued.`
+                : `${uploaded} uploaded, ${failed} failed.`;
+            if (failed > 0) {
+                this.uploadError = 'Some files failed. Check the file list below.';
             }
             this.uploading = false;
         },
