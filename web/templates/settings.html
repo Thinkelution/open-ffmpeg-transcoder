@@ -76,6 +76,11 @@
                     <span class="text-sm text-gray-300">Queue priority</span>
                     <input type="number" min="1" max="10" x-model.number="form.scanner_priority" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm">
                 </label>
+                <label class="block">
+                    <span class="text-sm text-gray-300">HLS CDN base URL</span>
+                    <input x-model="form.hls_cdn_base_url" class="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="https://wasabi-test-vivek.b-cdn.net">
+                    <span class="block text-xs text-gray-500 mt-1">When set, completed videos use this public CDN URL for playback instead of app-proxied HLS. No signing is used.</span>
+                </label>
             </div>
         </section>
 

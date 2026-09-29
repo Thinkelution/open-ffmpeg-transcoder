@@ -435,6 +435,7 @@ function settingsPage() {
             hls_audio_bitrate: '128k',
             hls_segment_seconds: 6,
             hls_ladder: '',
+            hls_cdn_base_url: '',
         },
 
         async load() {

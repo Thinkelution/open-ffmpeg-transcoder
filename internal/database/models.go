@@ -162,6 +162,7 @@ type AppSettings struct {
 	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
 	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
 	HLSLadder             string `json:"hls_ladder"`
+	HLSCDNBaseURL         string `json:"hls_cdn_base_url"`
 }
 
 type UpdateAppSettingsRequest struct {
@@ -188,4 +189,5 @@ type UpdateAppSettingsRequest struct {
 	HLSAudioBitrate       string `json:"hls_audio_bitrate"`
 	HLSSegmentSeconds     int    `json:"hls_segment_seconds"`
 	HLSLadder             string `json:"hls_ladder"`
+	HLSCDNBaseURL         string `json:"hls_cdn_base_url"`
 }

@@ -47,6 +47,7 @@ func Load(ctx context.Context, db *database.DB, cfg *config.Config) (RuntimeSett
 			HLSAudioBitrate:       database.StringSetting(values, "hls_audio_bitrate", cfg.HLSAudioBitrate),
 			HLSSegmentSeconds:     database.IntSetting(values, "hls_segment_seconds", cfg.HLSSegmentSeconds),
 			HLSLadder:             database.StringSetting(values, "hls_ladder", cfg.HLSLadder),
+			HLSCDNBaseURL:         cleanURL(database.StringSetting(values, "hls_cdn_base_url", "")),
 		},
 		S3SecretKey: secret,
 	}
@@ -109,11 +110,18 @@ func Save(ctx context.Context, db *database.DB, req database.UpdateAppSettingsRe
 		"hls_audio_bitrate":        strings.TrimSpace(req.HLSAudioBitrate),
 		"hls_segment_seconds":      strconv.Itoa(defaultInt(req.HLSSegmentSeconds, 6)),
 		"hls_ladder":               normalizeLadder(req.HLSLadder, req.HLSAudioBitrate),
+		"hls_cdn_base_url":         cleanURL(req.HLSCDNBaseURL),
 	}
 	if req.S3SecretKey != "" {
 		values["s3_secret_key"] = req.S3SecretKey
 	}
 	return db.UpdateSettingsMap(ctx, values)
+}
+
+func cleanURL(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimRight(value, "/")
+	return value
 }
 
 func cleanPrefix(value string) string {

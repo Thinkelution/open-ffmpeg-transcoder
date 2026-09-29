@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/thinkelution/open-ffmpeg-transcoder/internal/appsettings"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/config"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/database"
 	"github.com/thinkelution/open-ffmpeg-transcoder/internal/storage"
@@ -89,6 +90,7 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 		return
 	}
 
+	runtimeSettings, _ := appsettings.Load(c.Request.Context(), h.db, h.cfg)
 	items := make([]gin.H, 0, len(jobs))
 	for _, job := range jobs {
 		var inputCfg database.StorageConfig
@@ -122,10 +124,14 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			playable = true
 		}
 
+		playbackURL := fmt.Sprintf("/api/v1/media/uploads/%s/hls/master.m3u8", job.ID)
 		shareURL := ""
 		thumbnailURL := ""
 		if playable {
 			shareURL = h.publicPlayerURL(c, job.ID)
+			if cdnURL := cdnAssetURL(runtimeSettings.HLSCDNBaseURL, outputPrefix, "master.m3u8"); cdnURL != "" {
+				playbackURL = cdnURL
+			}
 		}
 		if thumbnailReady && outputCfg.Type == "s3" {
 			thumbCfg := outputCfg
@@ -147,7 +153,7 @@ func (h *MediaHandler) Uploads(c *gin.Context) {
 			"output_bucket":   outputBucket,
 			"output_prefix":   outputPrefix,
 			"master_playlist": childStorageURL(outputCfg.URL, "master.m3u8"),
-			"playback_url":    fmt.Sprintf("/api/v1/media/uploads/%s/hls/master.m3u8", job.ID),
+			"playback_url":    playbackURL,
 			"share_url":       shareURL,
 			"thumbnail_ready": thumbnailReady,
 			"thumbnail_url":   thumbnailURL,
@@ -257,10 +263,14 @@ func (h *MediaHandler) Share(c *gin.Context) {
 		return
 	}
 	presignExpires := 24 * time.Hour
+	hlsURL := h.externalBaseURL(c) + "/play/" + jobID + "/hls/master.m3u8"
+	if cdnURL := h.cdnHLSURL(c, job); cdnURL != "" {
+		hlsURL = cdnURL
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"expires_at": time.Now().Add(presignExpires).UTC().Format(time.RFC3339),
 		"player_url": h.publicPlayerURL(c, jobID),
-		"hls_url":    h.externalBaseURL(c) + "/play/" + jobID + "/hls/master.m3u8",
+		"hls_url":    hlsURL,
 	})
 }
 
@@ -280,7 +290,11 @@ func (h *MediaHandler) PublicPlayer(c *gin.Context) {
 	if source := path.Base(metadata["scanner_source_key"]); source != "." && source != "/" && source != "" {
 		name = html.EscapeString(source)
 	}
-	hlsURL := html.EscapeString("/play/" + jobID + "/hls/master.m3u8")
+	hlsSource := "/play/" + jobID + "/hls/master.m3u8"
+	if cdnURL := h.cdnHLSURL(c, job); cdnURL != "" {
+		hlsSource = cdnURL
+	}
+	hlsURL := html.EscapeString(hlsSource)
 	caption := html.EscapeString(outputPrefix)
 	page := fmt.Sprintf(`<!doctype html>
 <html lang="en">
@@ -543,6 +557,29 @@ func (h *MediaHandler) presignedHLSURLFromConfig(c *gin.Context, outputCfg datab
 	assetCfg := outputCfg
 	assetCfg.URL = childStorageURL(outputCfg.URL, strings.Trim(asset, "/"))
 	return storage.PresignGetObject(c.Request.Context(), assetCfg, h.cfg, expires)
+}
+
+func (h *MediaHandler) cdnHLSURL(c *gin.Context, job *database.Job) string {
+	settings, err := appsettings.Load(c.Request.Context(), h.db, h.cfg)
+	if err != nil || strings.TrimSpace(settings.HLSCDNBaseURL) == "" {
+		return ""
+	}
+	var outputCfg database.StorageConfig
+	if err := json.Unmarshal(job.OutputConfig, &outputCfg); err != nil || outputCfg.Type != "s3" {
+		return ""
+	}
+	_, outputPrefix := parseS3URL(outputCfg.URL)
+	return cdnAssetURL(settings.HLSCDNBaseURL, outputPrefix, "master.m3u8")
+}
+
+func cdnAssetURL(baseURL, outputPrefix, asset string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	outputPrefix = strings.Trim(outputPrefix, "/")
+	asset = strings.Trim(asset, "/")
+	if baseURL == "" || outputPrefix == "" || asset == "" {
+		return ""
+	}
+	return baseURL + "/" + path.Join(outputPrefix, asset)
 }
 
 func (h *MediaHandler) publicPlayerURL(c *gin.Context, jobID string) string {
